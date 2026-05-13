@@ -1,0 +1,15 @@
+*.DS_Store
+*.o
+*.egsphant.gz
+*.log
+eb_gui.app/*
+*.dcm
+*.stash
+source/moc_*
+source/Makefile
+*/*.zip
+LDR_Phantom_Test_Case
+configuration.txt
+database/dose/*.egsinp
+database/dose/*.3ddose
+database/transformation/*_phantom
