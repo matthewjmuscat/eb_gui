@@ -126,7 +126,7 @@ public:
 public slots:
 	void saveEB(); // Save egsinp file
     void runEB(); // Run egs_brachy
-    void finishEB(int code); // Call egs_brachy clean-up
+    void finishEB(int code, QProcess::ExitStatus); // Call egs_brachy clean-up
     void killEB(); // End interactive and parallel jobs;
 	void writeOutputToConsole();
     void runEV(); // Run egs_view

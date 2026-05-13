@@ -283,6 +283,8 @@ void ebInterface::connectLayout() {
 			this, SLOT(killEB()));
 	connect(console->save, SIGNAL(released()),
 			this, SLOT(saveLogEB()));
+    connect(ebProcess, SIGNAL(finished(int, QProcess::ExitStatus)), 
+        this, SLOT(finishEB(int, QProcess::ExitStatus)));
 	connect(ebProcess, SIGNAL(finished(int)),
 			this, SLOT(finishEB(int)));
 	connect(ebProcess, SIGNAL(readyReadStandardOutput()),
@@ -326,7 +328,8 @@ void ebInterface::refresh() {
 
 // Load files
 void ebInterface::loadTransport() {
-	QString path = QFileDialog::getOpenFileName(this, tr("Load transportation file"), parent->data->eb_location+"/lib/transport", tr("Transportation file (*)"));
+	QString path = QFileDialog::getOpenFileName(this, tr("Load transportation file"), 
+                   parent->data->lib_location+"/transport", tr("Transportation file (*)"));
 	
 	// Check to see if path is empty
 	if (path.length() < 1)
@@ -367,7 +370,8 @@ void ebInterface::loadTransport() {
 }
 
 void ebInterface::loadMaterial() {
-	QString path = QFileDialog::getOpenFileName(this, tr("Load material file"), parent->data->eb_location+"/lib/media", tr("Material file (*.dat)"));
+	QString path = QFileDialog::getOpenFileName(this, tr("Load material file"),
+                   parent->data->lib_location+"/media", tr("Material file (*.dat)"));
 	
 	// Check to see if path is empty
 	if (path.length() < 1)
@@ -401,7 +405,8 @@ void ebInterface::loadMaterial() {
 }
 
 void ebInterface::loadMuen() {
-	QString path = QFileDialog::getOpenFileName(this, tr("Load material file"), parent->data->eb_location+"/lib/muen", tr("Material file (*.muendat)"));
+	QString path = QFileDialog::getOpenFileName(this, tr("Load material file"), 
+                   parent->data->lib_location+"/muen", tr("Material file (*.muendat)"));
 	
 	// Check to see if path is empty
 	if (path.length() < 1)
@@ -463,10 +468,11 @@ void ebInterface::runEB() {
 	// Show the console
 	console->outputArea->clear();
 	console->show();
-	
+
 	// Create the egsinp file
 	ebName = fileNameEdit->text();
-	QFile egsinp(parent->data->eb_location + "/" + ebName + ".egsinp");
+    QString egsinp_path = parent->data->eb_location + "/" + ebName + ".egsinp";
+	QFile egsinp(egsinp_path);
 	
 	if (egsinp.exists()) {
 		if (QMessageBox::Yes == QMessageBox::question(this, "Name already found",
@@ -481,9 +487,7 @@ void ebInterface::runEB() {
 	
     if (!egsinp.open(QIODevice::WriteOnly | QIODevice::Text)) {
 		QMessageBox::information(0, "egsinp file error",
-        tr("Failed to create and open file:\n")
-		+ parent->data->eb_location + "/" + ebName + ".egsinp\n" +
-		tr("for simulations."));
+        tr("Failed to create and open file:\n") + egsinp_path + tr("for simulations."));
         return;
 	}
 	
@@ -496,10 +500,26 @@ void ebInterface::runEB() {
 	ebKillFlag = false; // Reset kill flag, tells user if job failed or was killed
 	ebProcess->setWorkingDirectory(parent->data->eb_location); // Go to eb directory
 	
-	if (njobBox->currentIndex() == 0) // Interactive
-		ebProcess->start(QString("egs_brachy -i ") + ebName);
-	else                              // Parallel
-		ebProcess->start(parent->data->ep_location + " -n" + njobBox->currentText() + " -d5 -f -v -c \"egs_brachy -i " + ebName + "\"");
+    ebProcess->setProcessEnvironment(parent->data->envVars);
+
+    QString eb_exe = "egs_brachy"; // assumes egs_brachy is in the $PATH
+    if (QStandardPaths::findExecutable("egs_brachy") == ""){
+        // no egs_brachy on the $PATH
+        eb_exe = QDir::cleanPath(parent->data->eh_location + "/bin/" + parent->data->my_machine + "/egs_brachy");
+        console->outputArea->insertPlainText("Using egs_brachy exe at " + eb_exe + "\n");
+    } else {
+        console->outputArea->insertPlainText("Using egs_brachy exe at $PATH/" + eb_exe + "\n");
+    }
+
+    QString process_command;
+	if (njobBox->currentIndex() == 0) { // Interactive
+		process_command = eb_exe + " -i " + ebName;
+    } 
+	else {                              // Parallel
+		process_command = parent->data->ep_location + " -n" + njobBox->currentText() 
+                        + " -d5 -f -v -c \"" + eb_exe +" -i " + ebName + "\"";
+    }
+    ebProcess->start(process_command);
 }
 
 void ebInterface::saveEB() {
@@ -604,16 +624,13 @@ void ebInterface::runEV() {
 	}
 	
 	// Create the egsinp file
-	QString egsinpPath = parent->data->eb_location + "/" + ebName + ".preview.egsinp";
-	
-	QFile egsinpFile(egsinpPath);
+	QString egsinp_path = parent->data->eb_location + "/" + ebName + ".preview.egsinp";
+	QFile egsinpFile(egsinp_path);
 	egsinpFile.remove();
 	
     if (!egsinpFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
 		QMessageBox::information(0, "egsinp file error",
-        tr("Failed to create file:\n")
-		+ egsinpPath + "\n" +
-		tr("for simulations."));
+        tr("Failed to create file:\n") + egsinp_path + "\n" + tr("for simulations."));
         return;
 	}
 	
@@ -629,11 +646,33 @@ void ebInterface::runEV() {
 		evProcess->start(QString("egs_view ") + ebName + ".preview.egsinp");
 }
 
-void ebInterface::finishEB(int code) {
-	// Check for bad exit
+QString exitStatusToString(QProcess::ExitStatus status) {
+    switch (status) {
+        case QProcess::NormalExit:
+            return QStringLiteral("NormalExit");
+        case QProcess::CrashExit:
+            return QStringLiteral("CrashExit");
+        default:
+            return QStringLiteral("Unknown");
+    }
+}
+
+void ebInterface::finishEB(int code, QProcess::ExitStatus status) {
+
+    QString stdoutData = QString(ebProcess->readAllStandardOutput());
+    QString stderrData = QString(ebProcess->readAllStandardError());
+    
+    console->outputArea->insertPlainText("=== STDOUT ===\n");
+    console->outputArea->insertPlainText(stdoutData + "\n");
+    console->outputArea->insertPlainText("=== STDERR ===\n");
+    console->outputArea->insertPlainText(stderrData+ "\n");
+    console->outputArea->insertPlainText("Exit code: " + QString::number(code) 
+                                        + "\nStatus: " + exitStatusToString(status) + "\n");
+    
 	if (code == 1) {
 		QMessageBox::warning(0, "egs_brachy error",
-        tr("The egs_brachy simulation ") + ebName + tr(" failed to run successfully."));		
+        tr("The egs_brachy simulation ") + ebName + tr(" failed to run successfully.") 
+        + tr("\n\nOutput:\n") + stdoutData + tr("\n\nErrors:\n") + stderrData);		
 		return;
 	}
 	else if (ebKillFlag) {

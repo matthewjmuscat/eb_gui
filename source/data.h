@@ -53,15 +53,28 @@ class Data : public QObject {
 private:
     Q_OBJECT // This line is necessary to create custom SIGNALs, ie, functions
              // that can notify a change for the GUI
+    
+    /*! \brief
+      Expand environment variables in a string, e.g. $EGS_HOME/eb_gui -> /home/name/EGSnrc_CLRP/egs_home/eb_gui
+      Also removes all occurrences of the double slash `//` since this can mess up EGS_Input reads of paths
+    */
+    void expand_env_var(QString& str, const QString& var);
+
 public:
+
+    // standard way to get preset environment variables
+    QProcessEnvironment envVars = QProcessEnvironment::systemEnvironment();
+
 	// locations
 	QString hh_location; // Hen House
 	QString eh_location; // Egs Home
 	
 	QString eb_location; // egs_brachy
 	QString gui_location; // eb_gui executable
+    QString lib_location; // egs_brachy/lib
 	QString ep_location; // egs-parallel location
-	
+	QString my_machine; // osx, linux, unix, windows
+    
 	// Default egsinp files
 	QString muen_location;
 	QString material_location;

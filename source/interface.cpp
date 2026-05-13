@@ -1035,20 +1035,20 @@ int Interface::populateEgsinp() {
 	s = data->libDirSources[i];
 	
 	if (s.contains("Cs131"))
-		egsinp->sourceSpecFile = data->eb_location+"/lib/spectra/Cs131_NNDC_2.6_line.spectrum"; // Pre-set parameter
+		egsinp->sourceSpecFile = data->lib_location+"/spectra/Cs131_NNDC_2.6_line.spectrum"; // Pre-set parameter
 	else if (s.contains("Ir192"))
-		egsinp->sourceSpecFile = data->eb_location+"/lib/spectra/Ir192_NNDC_2.6_line.spectrum"; // Pre-set parameter
+		egsinp->sourceSpecFile = data->lib_location+"/spectra/Ir192_NNDC_2.6_line.spectrum"; // Pre-set parameter
 	else if (s.contains("Pd103"))
-		egsinp->sourceSpecFile = data->eb_location+"/lib/spectra/Pd103_NNDC_2.6_line.spectrum"; // Pre-set parameter
+		egsinp->sourceSpecFile = data->lib_location+"/spectra/Pd103_NNDC_2.6_line.spectrum"; // Pre-set parameter
 	else
-		egsinp->sourceSpecFile = data->eb_location+"/lib/spectra/I125_NNDC_line.spectrum"; // Pre-set parameter
+		egsinp->sourceSpecFile = data->lib_location+"/spectra/I125_NCRP_line.spectrum";      // Pre-set parameter
 
-        s = sourceListView->currentItem()->text();
-        if (s.endsWith("_wrapped"))
-                s.chop(8);
-        i = data->libNameSources.indexOf(s);
-        s = data->libDirSources[i]+s;
-        egsinp->sourceSeedFile = s+".shape"; // GUI parameter
+	s = sourceListView->currentItem()->text();
+	if (s.endsWith("_wrapped"))
+			s.chop(8);
+	i = data->libNameSources.indexOf(s);
+	s = data->libDirSources[i]+s;
+	egsinp->sourceSeedFile = s+".shape"; // GUI parameter
 	
 	s = sourceListView->currentItem()->text();
 	i = data->libNameSources.indexOf(s);
@@ -1209,8 +1209,8 @@ int Interface::populateEgsinp() {
 					}
 		} while (!qtinp.atEnd());
 	else { // Couldn't open muendat file
-		QMessageBox::warning(0, "muen file error",
-        tr("Failed to open muendat file, aborting simulation."));
+		QMessageBox::warning(0, "muen file error", tr("Failed to open muendat file at\n") 
+		    + muen.fileName() + tr("\nAborting simulation. Please check your egs_brachy/configuration.txt"));
 		return 101;
 	}
 	

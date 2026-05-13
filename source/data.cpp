@@ -36,6 +36,10 @@
 #
 ################################################################################
 */
+#include <sys/types.h>
+#include <sys/stat.h>
+struct stat info; // required struct for using sys/stat
+
 #include "data.h"
 #include "interface.h" // Needed for some compiler variables
 
@@ -43,24 +47,95 @@
 #define ASSUME_PERMANENT_LDR // Used when there is no specification
 #define INTERPOLATE_CONTOURS // Used to create a new contour on slices between two contours from the same structure
 
+/*! \brief
+  Determines whether or not a file or directory exists at a location in the filesystem specified by `path` 
+*/
+bool exists(QString path){
+    std::string str = path.toStdString();
+    return stat(str.c_str(), &info) == 0;
+}
+
+void Data::expand_env_var(QString& str, const QString& var){
+    if (str.contains(QString("$")+var)){
+        str.replace(QString("$")+var, envVars.value(var));
+    }
+    while (str.contains(QString("//"))){  // egs_brachy can crash because egs_input doesn't like // in paths
+        str.replace(QString("//"), QString("/"));
+    }
+}
+
 int Data::loadDefaults() {
-	QProcessEnvironment envVars = QProcessEnvironment::systemEnvironment();
-	if (!envVars.contains("EGS_HOME")) // No EGS_HOME defined
-		return 101;
-	
+
+    // EGS_HOME
+    if (!envVars.contains("EGS_HOME")) { // No EGS_HOME defined
+        QMessageBox::warning(0, "EGS_HOME error", 
+            tr("No EGS_HOME environment variable. Please reconfigure your environment variables."));
+        return 101;
+    }	
 	eh_location = envVars.value("EGS_HOME");
+    if(!exists(eh_location)){
+        QMessageBox::warning(0, "EGS_HOME error", tr("The environment's EGS_HOME location\n") 
+        + eh_location + tr("\ndoes not exist. Please reconfigure your environment variables."));
+    }
+
+    // EGS_CONFIG
+    if (envVars.contains("EGS_CONFIG")) { // No HEN_HOUSE defined
+        QFileInfo egs_config = envVars.value("EGS_CONFIG");
+        my_machine = egs_config.baseName(); 
+    }
+    else {
+        QDir bin_dir(eh_location + "/bin/");
+        QStringList allEntries = bin_dir.entryList(QDir::AllEntries | QDir::NoDotAndDotDot);
+        my_machine = allEntries[0];
+    }
+
+    // HEN_HOUSE
+    if (!envVars.contains("HEN_HOUSE")) { // No HEN_HOUSE defined
+        // first try to figure it out based on EGS_CONFIG
+        if (envVars.contains("EGS_CONFIG")) { // No HEN_HOUSE defined
+            QFileInfo egs_config = envVars.value("EGS_CONFIG");
+            hh_location = QDir::cleanPath(egs_config.absolutePath() + "/../"); 
+        }
+        else {
+            hh_location = QDir::cleanPath(eh_location + "/../HEN_HOUSE");
+        }
+        envVars.insert("HEN_HOUSE", hh_location);
+    } 
+    else {
+        hh_location = envVars.value("HEN_HOUSE");
+    }
+
+    // egs_home/egs_brachy and egs_brachy/lib
 	eb_location = eh_location+"egs_brachy";
+    // check that we're looking in the correct location for egs_brachy/lib
+    lib_location = eb_location+"/lib";
+    if(!exists(lib_location)){
+        lib_location = eb_location+"/egs_brachy/lib";
+        if(!exists(lib_location)){
+            QMessageBox::warning(0, "egs_brachy lib error", tr("The deduced egs_brachy lib locations\n") 
+            + eh_location+"egs_brachy/lib" 
+            + tr("\n and \n") 
+            + eh_location+"egs_brachy/egs_brachy/lib" 
+            + tr("\ndo not exist. Please place egs_brachy inside the EGS_HOME directory."));
+        }
+    }
+
 	gui_location = QCoreApplication::applicationDirPath();
-	hh_location = envVars.value("HEN_HOUSE");
+    #if defined(__APPLE__)
+        // on OSX applicationDirPath() resolves to ${EGS_HOME}/eb_gui/eb_gui.app/Contents/MacOS
+        // but it should resolve to ${EGS_HOME}/eb_gui
+        // so we go back 3 directories
+        gui_location = QDir::cleanPath(gui_location + "/../../..");
+    #endif
 	ep_location = hh_location+"scripts/bin/egs-parallel";
 	
 	QFile *file;
     QTextStream *input;
 	QString text;
 	
-	muen_location = eb_location+"/lib/muen/brachy_xcom_1.5MeV.muendat";
-	material_location = eb_location+"/lib/media/material.dat";
-	transport_location = eb_location+"/lib/transport/low_energy_default";
+	muen_location = lib_location+"/muen/brachy_xcom_1.5MeV.muendat";
+	material_location = lib_location+"/media/material.dat";
+	transport_location = lib_location+"/transport/low_energy_default";
 	mar_location = gui_location+"/database/MAR_defaults.txt";
 	metric_location = gui_location+"/database/metric_defaults.txt";
 	def_ncase = "1e8";
@@ -77,7 +152,7 @@ int Data::loadDefaults() {
 			// as long as the number of lines in the config file stays in
 			// the tens, it should be fine
 			if (text.left(15).compare("muen location =") == 0)
-				muen_location = text.right(text.length()-15).trimmed();
+                muen_location = text.right(text.length()-15).trimmed(); // Why the override for muen, transport, material, ncase?
 			else if (text.left(19).compare("material location =") == 0)
 				material_location = text.right(text.length()-19).trimmed();
 			else if (text.left(20).compare("transport location =") == 0)
@@ -120,18 +195,15 @@ int Data::loadDefaults() {
 	
 	// substitute environmental variables
 	QStringList envNames = envVars.keys();
-	for (int i = 0; i < envNames.size(); i++) {
-		if (muen_location.contains(QString("$")+envNames[i]))
-			muen_location.replace(QString("$")+envNames[i],envVars.value(envNames[i]));
-		if (material_location.contains(QString("$")+envNames[i]))
-			material_location.replace(QString("$")+envNames[i],envVars.value(envNames[i]));
-		if (transport_location.contains(QString("$")+envNames[i]))
-			transport_location.replace(QString("$")+envNames[i],envVars.value(envNames[i]));
+	for (const QString& env_name : envNames) {
+        expand_env_var(muen_location, env_name);
+        expand_env_var(material_location, env_name);
+        expand_env_var(transport_location, env_name);
 	}
 	
 	// egs_brachy library data
 	QDirIterator* files;
-	files = new QDirIterator(eb_location+"/lib/geometry/sources/", {"*.geom"}, QDir::NoFilter, QDirIterator::Subdirectories); // #nofilter #nomakeup
+	files = new QDirIterator(lib_location+"/geometry/sources/", {"*.geom"}, QDir::NoFilter, QDirIterator::Subdirectories); // #nofilter #nomakeup
 	while(files->hasNext()) {
 		files->next();
 		libNameSources << files->fileName().left(files->fileName().length()-5);
@@ -139,7 +211,7 @@ int Data::loadDefaults() {
 	}
 	delete files;
 	
-	files = new QDirIterator(eb_location+"/lib/geometry/phantoms/", {"*.geom"}, QDir::NoFilter, QDirIterator::Subdirectories); // #nofilter #nomakeup
+	files = new QDirIterator(lib_location+"/geometry/phantoms/", {"*.geom"}, QDir::NoFilter, QDirIterator::Subdirectories); // #nofilter #nomakeup
 	while(files->hasNext()) {
 		files->next();
 		libNamePhants << files->fileName();
@@ -147,7 +219,7 @@ int Data::loadDefaults() {
 	}
 	delete files;
 	
-	files = new QDirIterator(eb_location+"/lib/geometry/transformations/", QDirIterator::Subdirectories); // #nofilter #nomakeup
+	files = new QDirIterator(lib_location+"/geometry/transformations/", QDirIterator::Subdirectories); // #nofilter #nomakeup
 	while(files->hasNext()) {
 		files->next();
 		if (files->fileName() != "." && files->fileName() != "..") {
@@ -157,7 +229,7 @@ int Data::loadDefaults() {
 	}
 	delete files;
 	
-	files = new QDirIterator(eb_location+"/lib/geometry/eye_plaques/", {"*.geom"}, QDir::NoFilter, QDirIterator::Subdirectories); // #nofilter #nomakeup
+	files = new QDirIterator(lib_location+"/geometry/eye_plaques/", {"*.geom"}, QDir::NoFilter, QDirIterator::Subdirectories); // #nofilter #nomakeup
 	while(files->hasNext()) {
 		files->next();
 		libNameGeometries << files->fileName().left(files->fileName().length()-5);
@@ -165,7 +237,7 @@ int Data::loadDefaults() {
 	}
 	delete files;
 	
-	files = new QDirIterator(eb_location+"/lib/geometry/applicators/", {"*.geom"}, QDir::NoFilter, QDirIterator::Subdirectories); // #nofilter #nomakeup
+	files = new QDirIterator(lib_location+"/geometry/applicators/", {"*.geom"}, QDir::NoFilter, QDirIterator::Subdirectories); // #nofilter #nomakeup
 	while(files->hasNext()) {
 		files->next();
 		libNameGeometries << files->fileName().left(files->fileName().length()-5);
