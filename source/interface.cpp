@@ -1320,14 +1320,26 @@ void EGS_geom::createLayout() {
 	labelTab  = new QLabel(name.left(20));
 	labelGeom = new QLabel(name);
 	remove    = new QPushButton("Remove");
-	labelPos  = new QLabel("Position");
+	labelPos  = new QLabel("Position ");
+    labelPos->setToolTip("(x, y, z) [cm]");
 	xPos      = new QLineEdit("0");
 	yPos      = new QLineEdit("0");
 	zPos      = new QLineEdit("0");
+    xPos->setToolTip("x / cm");
+    yPos->setToolTip("y / cm");
+    zPos->setToolTip("z / cm");
+
+    // rotation units and conventions
+    // nrc-cnrc.github.io/EGSnrc/doc/pirs898/classEGS__AffineTransform.html#a601a07115aecff1925956a9097e69950
 	labelRot  = new QLabel("Rotation");
+	labelRot->setToolTip("(x, y, z) [radians] {Z-Y-X ordering}");
 	xRot      = new QLineEdit("0");
 	yRot      = new QLineEdit("0");
 	zRot      = new QLineEdit("0");
+    xRot->setToolTip("x / radians");
+    yRot->setToolTip("y / radians");
+    zRot->setToolTip("z / radians");
+    
 	labelPrio = new QLabel("Priority");
 	Prio      = new QLineEdit("100");
 
