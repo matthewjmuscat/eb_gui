@@ -104,6 +104,8 @@ public:
 	
 public slots:
 	int populateEgsinp();
+	void updateRunSourceFromTransformation();
+	void updateAirKermaFromSelectedTransformation();
 	
 // GLOBAL WIDGETS~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 public:
