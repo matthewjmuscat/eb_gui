@@ -85,6 +85,7 @@ public:
 	QLineEdit*   calibEdit;
 	QPushButton* calibLoad;
 	
+	QPushButton* autoConfigureProstateVpm;
 	QPushButton* create;
 	
 	QGridLayout* dcmGrid;
@@ -173,6 +174,7 @@ public slots:
 	
 	int parseError (int err); // Output DICOM parsing error
 	
+	void autoConfigureProstateVPM(); // Set prostate VPM import widgets without creating the VPM
 	void createEGSphant(); // Invoke data's egsphant making function
 
 public:

@@ -42,6 +42,26 @@
 #include "GUI/doseInterface.h"
 #include "GUI/appInterface.h"
 
+namespace {
+	QString selectedListText(QListWidget *list) {
+		return list->currentItem() ? list->currentItem()->text() : QString();
+	}
+
+	void restoreListSelection(QListWidget *list, const QString &text) {
+		if (text.isEmpty())
+			return;
+		QList <QListWidgetItem*> items = list->findItems(text, Qt::MatchExactly);
+		if (items.size())
+			list->setCurrentItem(items[0]);
+	}
+
+	void restoreComboSelection(QComboBox *combo, const QString &text) {
+		int index = combo->findText(text);
+		if (index >= 0)
+			combo->setCurrentIndex(index);
+	}
+}
+
 // Constructor
 Interface::Interface()
 // [\d*] one digit followed by:
@@ -406,17 +426,24 @@ void Interface::connectLayout() {
 
 // Global widget functions
 void Interface::phantomRepopulate() {
+	data->sortPhantomResources();
+	QString phantomSelection = selectedListText(phantomListView);
+	QString previewPhantSelection = ((doseInterface*)doseInt)->phantSelect->currentText();
+	QString histPhantSelection = ((doseInterface*)doseInt)->histPhantSelect->currentText();
+	QString profPhantSelection = ((doseInterface*)doseInt)->profPhantSelect->currentText();
+	QString appPhantSelection = ((appInterface*)appInt)->egsphant->currentText();
+
 	phantomListView->clear();
-	
+
 	((doseInterface*)doseInt)->phantSelect->clear();
 	((doseInterface*)doseInt)->phantSelect->addItem("none");
-	
+
 	((doseInterface*)doseInt)->histPhantSelect->clear();
 	((doseInterface*)doseInt)->histPhantSelect->addItem("none");
-	
+
 	((doseInterface*)doseInt)->profPhantSelect->clear();
 	((doseInterface*)doseInt)->profPhantSelect->addItem("none");
-	
+
 	((appInterface*)appInt)->egsphant->clear();
 	((appInterface*)appInt)->egsphant->addItem("none");
 	
@@ -431,9 +458,18 @@ void Interface::phantomRepopulate() {
 		for (int i = 0; i < data->libNamePhants.size(); i++) {
 			phantomListView->addItem(data->libNamePhants[i]);		
 		}
+
+	restoreListSelection(phantomListView, phantomSelection);
+	restoreComboSelection(((doseInterface*)doseInt)->phantSelect, previewPhantSelection);
+	restoreComboSelection(((doseInterface*)doseInt)->histPhantSelect, histPhantSelection);
+	restoreComboSelection(((doseInterface*)doseInt)->profPhantSelect, profPhantSelection);
+	restoreComboSelection(((appInterface*)appInt)->egsphant, appPhantSelection);
 }
 
 void Interface::sourceRepopulate() {
+	data->sortSourceResources();
+	QString sourceSelection = selectedListText(sourceListView);
+
 	sourceListView->clear();
 	for (int i = 0; i < data->libNameSources.size(); i++) {
 		if (data->libDirSources[i].contains(QString("/")+sourceChooser->currentText()+"_")) {
@@ -443,14 +479,21 @@ void Interface::sourceRepopulate() {
 				sourceListView->addItem(data->libNameSources[i]);
 		}
 	}
+
+	restoreListSelection(sourceListView, sourceSelection);
 }
 
 void Interface::transformationRepopulate() {
+	data->sortTransformationResources();
+	QString transformSelection = selectedListText(transformationListView);
+	QString marTransformSelection = ((phantInterface*)phantInt)->marTransformation->currentText();
+	QString appTransformSelection = ((appInterface*)appInt)->transform->currentText();
+
 	transformationListView->clear();
-	
+
 	((appInterface*)appInt)->transform->clear();
 	((appInterface*)appInt)->transform->addItem("none");
-	
+
 	((phantInterface*)phantInt)->marTransformation->clear();
 	for (int i = 0; i < data->localNameTransforms.size(); i++) {
 		transformationListView->addItem(data->localNameTransforms[i]);
@@ -461,13 +504,22 @@ void Interface::transformationRepopulate() {
 		for (int i = 0; i < data->libNameTransforms.size(); i++) {
 			transformationListView->addItem(data->libNameTransforms[i]);	
 		}
+
+	restoreListSelection(transformationListView, transformSelection);
+	restoreComboSelection(((phantInterface*)phantInt)->marTransformation, marTransformSelection);
+	restoreComboSelection(((appInterface*)appInt)->transform, appTransformSelection);
 }
 
 void Interface::geometryRepopulate() {
+	data->sortGeometryResources();
+	QString geometrySelection = selectedListText(geometryListView);
+
 	geometryListView->clear();
 	for (int i = 0; i < data->libNameGeometries.size(); i++)
 		if (data->libDirGeometries[i].contains(QString("/")+geometryChooser->currentText()+"/"))
 			geometryListView->addItem(data->libNameGeometries[i]);
+
+	restoreListSelection(geometryListView, geometrySelection);
 }
 
 void Interface::geometryAddNew() {
@@ -488,8 +540,18 @@ void Interface::geometryAddNew() {
 }
 
 void Interface::doseRepopulate() {
+	data->sortDoseResources();
+	QString doseSelection = selectedListText(doseListView);
+	QString mapDoseSelection = ((doseInterface*)doseInt)->mapDoseBox->currentText();
+	QString isoDoseSelection0 = ((doseInterface*)doseInt)->isoDoseBox[0]->currentText();
+	QString isoDoseSelection1 = ((doseInterface*)doseInt)->isoDoseBox[1]->currentText();
+	QString isoDoseSelection2 = ((doseInterface*)doseInt)->isoDoseBox[2]->currentText();
+	QString histDoseSelection = ((doseInterface*)doseInt)->histDoseSelect->currentText();
+	QString profDoseSelection = ((doseInterface*)doseInt)->profDoseSelect->currentText();
+	QString appDoseSelection = ((appInterface*)appInt)->dose->currentText();
+
 	doseListView->clear();
-	
+
 	((doseInterface*)doseInt)->mapDoseBox->clear();
 	((doseInterface*)doseInt)->isoDoseBox[0]->clear();
 	((doseInterface*)doseInt)->isoDoseBox[1]->clear();
@@ -497,12 +559,12 @@ void Interface::doseRepopulate() {
 	((doseInterface*)doseInt)->histDoseSelect->clear();
 	((doseInterface*)doseInt)->profDoseSelect->clear();
 	((doseInterface*)doseInt)->resetDoses();
-	
+
 	((doseInterface*)doseInt)->mapDoseBox->addItem("none");
 	((doseInterface*)doseInt)->isoDoseBox[0]->addItem("none");
 	((doseInterface*)doseInt)->isoDoseBox[1]->addItem("none");
 	((doseInterface*)doseInt)->isoDoseBox[2]->addItem("none");
-	
+
 	((appInterface*)appInt)->dose->clear();
 	((appInterface*)appInt)->dose->addItem("none");
 	
@@ -516,6 +578,15 @@ void Interface::doseRepopulate() {
 		((doseInterface*)doseInt)->profDoseSelect->addItem(data->localNameDoses[i]);
 		((appInterface*)appInt)->dose->addItem(data->localNameDoses[i]);
 	}
+
+	restoreListSelection(doseListView, doseSelection);
+	restoreComboSelection(((doseInterface*)doseInt)->mapDoseBox, mapDoseSelection);
+	restoreComboSelection(((doseInterface*)doseInt)->isoDoseBox[0], isoDoseSelection0);
+	restoreComboSelection(((doseInterface*)doseInt)->isoDoseBox[1], isoDoseSelection1);
+	restoreComboSelection(((doseInterface*)doseInt)->isoDoseBox[2], isoDoseSelection2);
+	restoreComboSelection(((doseInterface*)doseInt)->histDoseSelect, histDoseSelection);
+	restoreComboSelection(((doseInterface*)doseInt)->profDoseSelect, profDoseSelection);
+	restoreComboSelection(((appInterface*)appInt)->dose, appDoseSelection);
 }
 
 void Interface::phantomViewLog() {

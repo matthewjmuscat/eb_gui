@@ -38,6 +38,117 @@
 */
 #include "phantInterface.h"
 
+#include <algorithm>
+#include <QCollator>
+#include <QInputDialog>
+
+namespace {
+	struct MatchedContour {
+		QString role;
+		QString tas;
+		int index;
+	};
+
+	int findComboIndex(QComboBox *combo, const QString &text) {
+		for (int i = 0; i < combo->count(); i++)
+			if (combo->itemText(i).compare(text, Qt::CaseInsensitive) == 0)
+				return i;
+		return -1;
+	}
+
+	bool isAIAutocontour(const QString &name) {
+		QString lower = name.toLower();
+		return lower.startsWith("ai_") || lower.contains("_ai_") || lower.contains("ai_rad");
+	}
+
+	QVector <int> exactMatches(const QStringList &names, const QString &target) {
+		QVector <int> matches;
+		for (int i = 0; i < names.size(); i++)
+			if (names[i].compare(target, Qt::CaseInsensitive) == 0)
+				matches.append(i);
+		return matches;
+	}
+
+	QVector <int> nonAiContainsMatches(const QStringList &names, const QString &target) {
+		QVector <int> matches;
+		for (int i = 0; i < names.size(); i++)
+			if (!isAIAutocontour(names[i]) && names[i].contains(target, Qt::CaseInsensitive))
+				matches.append(i);
+		return matches;
+	}
+
+	int chooseMatch(QWidget *parent, const QString &role, const QStringList &names, const QVector <QVector <int> > &tiers, bool *canceled) {
+		for (int tier = 0; tier < tiers.size(); tier++) {
+			if (tiers[tier].size() == 1)
+				return tiers[tier][0];
+			if (tiers[tier].size() > 1) {
+				QStringList choices;
+				for (int i = 0; i < tiers[tier].size(); i++)
+					choices << names[tiers[tier][i]];
+				bool ok = false;
+				QString choice = QInputDialog::getItem(parent,
+					QObject::tr("Select contour"),
+					QObject::tr("Select the %1 contour:").arg(role),
+					choices, 0, false, &ok);
+				if (!ok) {
+					*canceled = true;
+					return -1;
+				}
+				return tiers[tier][choices.indexOf(choice)];
+			}
+		}
+		return -1;
+	}
+
+	QString leadingPatientKey(const QString &name) {
+		QRegExp pattern("^(\\d{4})(\\^|$)");
+		if (pattern.indexIn(name.trimmed()) == 0)
+			return pattern.cap(1);
+		return QString();
+	}
+
+	bool matchesPatientKey(const QString &name, const QString &patientKey) {
+		return name.startsWith(patientKey) && (name.size() == patientKey.size() || name[patientKey.size()] == '^');
+	}
+
+	int chooseSourceLocation(QWidget *parent, QComboBox *sourceBox, const QString &patientKey, bool *canceled) {
+		QVector <int> matches;
+		for (int i = 0; i < sourceBox->count(); i++)
+			if (matchesPatientKey(sourceBox->itemText(i), patientKey))
+				matches.append(i);
+
+		if (matches.size() == 1)
+			return matches[0];
+		if (matches.size() > 1) {
+			QStringList choices;
+			for (int i = 0; i < matches.size(); i++)
+				choices << sourceBox->itemText(matches[i]);
+			bool ok = false;
+			QString choice = QInputDialog::getItem(parent,
+				QObject::tr("Select source locations"),
+				QObject::tr("Select the source locations for patient %1:").arg(patientKey),
+				choices, 0, false, &ok);
+			if (!ok) {
+				*canceled = true;
+				return -1;
+			}
+			return matches[choices.indexOf(choice)];
+		}
+		return -1;
+	}
+
+	QStringList sortedContourNames(const QStringList &names) {
+		QStringList sorted = names;
+		QCollator collator;
+		collator.setNumericMode(true);
+		collator.setCaseSensitivity(Qt::CaseInsensitive);
+		std::stable_sort(sorted.begin(), sorted.end(), [&collator](const QString &left, const QString &right) {
+			return collator.compare(left, right) < 0;
+		});
+		return sorted;
+	}
+}
+
 // Constructors
 phantInterface::phantInterface()
 // [\d*] one digit followed by:
@@ -124,10 +235,13 @@ void phantInterface::createLayout() {
 	ttt = parent->data->hu_location;
 	structEdit->setToolTip(ttt);
 	
-	create         = new QPushButton(tr("Create virtual patient model"));
+	autoConfigureProstateVpm = new QPushButton(tr("Auto-configure prostate VPM"));
+	create                   = new QPushButton(tr("Create virtual patient model"));
 	
+	ttt = tr("Set prostate VPM tissue assignment, metric masks, contour priority, and MAR widgets from the loaded CT/RTSTRUCT data.");
+	autoConfigureProstateVpm->setToolTip(ttt);
 	ttt = tr("Generate egsphant in local directory.");
-	structEdit->setToolTip(ttt);
+	create->setToolTip(ttt);
 	
 	dcmGrid        = new QGridLayout();
 	dcmFrame       = new QFrame     ();
@@ -357,6 +471,7 @@ void phantInterface::createLayout() {
 	mainLayout->addWidget(prioFrame   , 2, 0, 2, 1);
 	mainLayout->addWidget(contourFrame, 0, 1, 4, 1);
 	mainLayout->addWidget(marFrame    , 0, 2, 1, 1);
+	mainLayout->addWidget(autoConfigureProstateVpm, 2, 2, 1, 1);
 	mainLayout->addWidget(create      , 3, 2, 1, 1);
 	
 	mainLayout->setColumnStretch(0, 5);
@@ -391,6 +506,8 @@ void phantInterface::connectLayout() {
 	connect(ctDeleteAll, SIGNAL(released()),
 			this, SLOT(deleteAllCT()));
 			
+	connect(autoConfigureProstateVpm, SIGNAL(released()),
+			this, SLOT(autoConfigureProstateVPM()));
 	connect(create, SIGNAL(released()),
 			this, SLOT(createEGSphant()));
 }
@@ -432,6 +549,159 @@ void phantInterface::fillMARvalues() {
 	}
 	
 	refresh();
+}
+
+void phantInterface::autoConfigureProstateVPM() {
+	if (parent->data->CT_data.isEmpty()) {
+		QMessageBox::warning(0, "Auto-configure prostate VPM error",
+		tr("No CT data is loaded. Aborting."));
+		return;
+	}
+	if (!parent->data->struct_loaded || prioView->count() == 0) {
+		QMessageBox::warning(0, "Auto-configure prostate VPM error",
+		tr("No RTSTRUCT data is loaded. Aborting."));
+		return;
+	}
+
+	QStringList contourNames;
+	QVector <int> contourIndices;
+	for (int i = 0; i < contourTASLabel.size(); i++) {
+		if (contourTASLabel[i]->isEnabled()) {
+			contourNames << contourTASLabel[i]->text();
+			contourIndices.append(i);
+		}
+	}
+	if (contourNames.isEmpty()) {
+		QMessageBox::warning(0, "Auto-configure prostate VPM error",
+		tr("No contours are available from the loaded RTSTRUCT. Aborting."));
+		return;
+	}
+
+	bool canceled = false;
+	QVector <QVector <int> > prostateTiers;
+	prostateTiers << exactMatches(contourNames, "Prostate_CT")
+	              << exactMatches(contourNames, "Prostate")
+	              << nonAiContainsMatches(contourNames, "prostate")
+	              << exactMatches(contourNames, "AI_RAD_Prostate");
+	int prostate = chooseMatch(this, tr("prostate"), contourNames, prostateTiers, &canceled);
+	if (canceled)
+		return;
+
+	QVector <QVector <int> > bladderTiers;
+	bladderTiers << exactMatches(contourNames, "Bladder")
+	             << nonAiContainsMatches(contourNames, "bladder")
+	             << exactMatches(contourNames, "AI_RAD_Bladder");
+	int bladder = chooseMatch(this, tr("bladder"), contourNames, bladderTiers, &canceled);
+	if (canceled)
+		return;
+
+	QVector <QVector <int> > rectumTiers;
+	rectumTiers << exactMatches(contourNames, "Rectum")
+	            << nonAiContainsMatches(contourNames, "rectum")
+	            << exactMatches(contourNames, "AI_RAD_Rectum");
+	int rectum = chooseMatch(this, tr("rectum"), contourNames, rectumTiers, &canceled);
+	if (canceled)
+		return;
+
+	QVector <QVector <int> > urethraTiers;
+	urethraTiers << exactMatches(contourNames, "Urethra")
+	             << nonAiContainsMatches(contourNames, "urethra");
+	int urethra = chooseMatch(this, tr("urethra"), contourNames, urethraTiers, &canceled);
+	if (canceled)
+		return;
+
+	QStringList missingRequired;
+	if (prostate < 0)
+		missingRequired << tr("prostate");
+	if (bladder < 0)
+		missingRequired << tr("bladder");
+	if (rectum < 0)
+		missingRequired << tr("rectum");
+	if (missingRequired.size()) {
+		QMessageBox::warning(0, "Auto-configure prostate VPM error",
+		tr("Could not identify required contour(s): ") + missingRequired.join(", ") + tr(". Aborting."));
+		return;
+	}
+
+	int defaultTasIndex = findComboIndex(defaultTASBox, "Male_tissue_patient");
+	int prostateTasIndex = findComboIndex(contourTASBox[0], "Prostate");
+	int bladderTasIndex = findComboIndex(contourTASBox[0], "Bladder");
+	int rectumTasIndex = findComboIndex(contourTASBox[0], "Rectum");
+	int urethraTasIndex = urethra >= 0 ? findComboIndex(contourTASBox[0], "Urethra") : 0;
+	int marDefaultIndex = findComboIndex(marDefault, "Prostate");
+	QStringList missingSettings;
+	if (defaultTasIndex < 0)
+		missingSettings << "Male_tissue_patient TAS";
+	if (prostateTasIndex < 0)
+		missingSettings << "Prostate TAS";
+	if (bladderTasIndex < 0)
+		missingSettings << "Bladder TAS";
+	if (rectumTasIndex < 0)
+		missingSettings << "Rectum TAS";
+	if (urethra >= 0 && urethraTasIndex < 0)
+		missingSettings << "Urethra TAS";
+	if (marDefaultIndex < 0)
+		missingSettings << "Prostate MAR settings";
+	if (missingSettings.size()) {
+		QMessageBox::warning(0, "Auto-configure prostate VPM error",
+		tr("Could not find required setting(s): ") + missingSettings.join(", ") + tr(". Aborting."));
+		return;
+	}
+
+	QString patientKey = leadingPatientKey(phantNameEdit->text());
+	if (patientKey.isEmpty()) {
+		QMessageBox::warning(0, "Auto-configure prostate VPM error",
+		tr("The VPM name must begin with four digits followed by ^ or the end of the name to match source locations. Aborting."));
+		return;
+	}
+	int sourceIndex = chooseSourceLocation(this, marTransformation, patientKey, &canceled);
+	if (canceled)
+		return;
+	if (sourceIndex < 0) {
+		QMessageBox::warning(0, "Auto-configure prostate VPM error",
+		tr("No source locations matching patient key ") + patientKey + tr(" were found. Aborting."));
+		return;
+	}
+
+	defaultTASBox->setCurrentIndex(defaultTasIndex);
+	for (int i = 0; i < contourTASLabel.size(); i++) {
+		contourTASMask[i]->setChecked(false);
+		contourTASBox[i]->setCurrentIndex(0);
+	}
+
+	QVector <MatchedContour> matchedContours;
+	if (urethra >= 0)
+		matchedContours.append({tr("urethra"), "Urethra", contourIndices[urethra]});
+	matchedContours.append({tr("prostate"), "Prostate", contourIndices[prostate]});
+	matchedContours.append({tr("bladder"), "Bladder", contourIndices[bladder]});
+	matchedContours.append({tr("rectum"), "Rectum", contourIndices[rectum]});
+
+	for (int i = 0; i < matchedContours.size(); i++) {
+		contourTASMask[matchedContours[i].index]->setChecked(true);
+		contourTASBox[matchedContours[i].index]->setCurrentIndex(findComboIndex(contourTASBox[matchedContours[i].index], matchedContours[i].tas));
+	}
+
+	QStringList priorityNames;
+	for (int i = 0; i < matchedContours.size(); i++)
+		if (!priorityNames.contains(contourTASLabel[matchedContours[i].index]->text()))
+			priorityNames << contourTASLabel[matchedContours[i].index]->text();
+	QStringList remainingNames;
+	for (int i = 0; i < contourNames.size(); i++)
+		if (!priorityNames.contains(contourNames[i]))
+			remainingNames << contourNames[i];
+	priorityNames << sortedContourNames(remainingNames);
+	prioView->clear();
+	prioView->addItems(priorityNames);
+
+	marEnable->setChecked(true);
+	marTransformation->setCurrentIndex(sourceIndex);
+	marDefault->setCurrentIndex(marDefaultIndex);
+	fillMARvalues();
+	marContour->setChecked(false);
+	refresh();
+
+	QMessageBox::information(0, "Auto-configure prostate VPM",
+	tr("Prostate VPM settings have been configured. Review the selections, then create the virtual patient model when ready."));
 }
 
 // Pull DICOM data
@@ -571,7 +841,9 @@ void phantInterface::createEGSphant() {
 			logFile.close();
 		}
 		
-		parent->phantomListView->setCurrentRow(parent->phantomListView->count()-1);
+		QList <QListWidgetItem*> createdPhantoms = parent->phantomListView->findItems(fileName+".egsphant.gz", Qt::MatchExactly);
+		if (createdPhantoms.size())
+			parent->phantomListView->setCurrentItem(createdPhantoms[0]);
 		
 		// Show the log
 		log->outputArea->clear();
