@@ -36,6 +36,8 @@
 #
 ################################################################################
 */
+#include <cmath>
+
 #include "GUI/phantInterface.h"
 #include "GUI/sourceInterface.h"
 #include "GUI/ebInterface.h"
@@ -43,6 +45,12 @@
 #include "GUI/appInterface.h"
 
 namespace {
+	struct CanonicalToken {
+		QString text;
+		int start;
+		int end;
+	};
+
 	QString selectedListText(QListWidget *list) {
 		return list->currentItem() ? list->currentItem()->text() : QString();
 	}
@@ -59,6 +67,294 @@ namespace {
 		int index = combo->findText(text);
 		if (index >= 0)
 			combo->setCurrentIndex(index);
+	}
+
+	bool parsePositiveFiniteDouble(const QString &text, double *value = nullptr) {
+		bool ok = false;
+		double parsed = text.trimmed().toDouble(&ok);
+		if (!ok || !std::isfinite(parsed) || parsed <= 0)
+			return false;
+		if (value)
+			*value = parsed;
+		return true;
+	}
+
+	bool isAirKermaMode(Interface *ui) {
+		return ui->sourceScaleBox->currentText().compare("Air kerma strength", Qt::CaseInsensitive) == 0;
+	}
+
+	QString joinPath(const QString &dir, const QString &name) {
+		if (dir.endsWith("/") || dir.endsWith("\\"))
+			return dir + name;
+		return dir + "/" + name;
+	}
+
+	bool selectedTransformationFile(Interface *ui, QString *path, QString *name = nullptr) {
+		int row = ui->transformationListView->currentRow();
+		if (row < 0)
+			return false;
+
+		QString transformName;
+		QString transformDir;
+		if (row < ui->data->localNameTransforms.size()) {
+			transformName = ui->data->localNameTransforms[row];
+			transformDir = ui->data->localDirTransforms[row];
+		}
+		else {
+			int libIndex = row - ui->data->localNameTransforms.size();
+			if (libIndex < 0 || libIndex >= ui->data->libNameTransforms.size())
+				return false;
+			transformName = ui->data->libNameTransforms[libIndex];
+			transformDir = ui->data->libDirTransforms[libIndex];
+		}
+
+		if (path)
+			*path = joinPath(transformDir, transformName);
+		if (name)
+			*name = transformName;
+		return true;
+	}
+
+	void clearSourceSelection(Interface *ui) {
+		ui->sourceListView->clearSelection();
+		ui->sourceListView->setCurrentRow(-1);
+	}
+
+	bool readAirKermaStrength(const QString &transformPath, QString *valueText) {
+		QFile file(transformPath);
+		if (!file.open(QIODevice::Text | QIODevice::ReadOnly))
+			return false;
+
+		QRegExp header("^\\s*#?\\s*Air\\s+Kerma\\s+Strength\\s*=\\s*(.+)\\s*$", Qt::CaseInsensitive);
+		while (!file.atEnd()) {
+			QString line = file.readLine();
+			if (header.indexIn(line) == 0) {
+				QString candidate = header.cap(1).split("#")[0].trimmed();
+				if (parsePositiveFiniteDouble(candidate)) {
+					*valueText = candidate;
+					return true;
+				}
+				return false;
+			}
+		}
+		return false;
+	}
+
+	QString readDescriptiveLogMetadata(const QString &transformPath) {
+		QFile file(transformPath + ".log");
+		if (!file.open(QIODevice::Text | QIODevice::ReadOnly))
+			return QString();
+
+		QString metadata;
+		QRegExp coordinateStart("^\\s*Found\\s+\\d+\\s+seeds\\b", Qt::CaseInsensitive);
+		while (!file.atEnd()) {
+			QString line = file.readLine();
+			if (coordinateStart.indexIn(line) == 0 || line.contains(":start transformation:", Qt::CaseInsensitive))
+				break;
+			metadata.append(line);
+		}
+		return metadata;
+	}
+
+	QString canonicalAlphaNum(const QString &text) {
+		QString canonical;
+		for (int i = 0; i < text.size(); i++)
+			if (text[i].isLetterOrNumber())
+				canonical.append(text[i].toLower());
+		return canonical;
+	}
+
+	QVector <CanonicalToken> canonicalTokens(const QString &line) {
+		QVector <CanonicalToken> tokens;
+		int start = -1;
+		QString token;
+		for (int i = 0; i < line.size(); i++) {
+			if (line[i].isLetterOrNumber()) {
+				if (start < 0)
+					start = i;
+				token.append(line[i].toLower());
+			}
+			else if (start >= 0) {
+				CanonicalToken newToken;
+				newToken.text = token;
+				newToken.start = start;
+				newToken.end = i;
+				tokens.append(newToken);
+				start = -1;
+				token.clear();
+			}
+		}
+
+		if (start >= 0) {
+			CanonicalToken newToken;
+			newToken.text = token;
+			newToken.start = start;
+			newToken.end = line.size();
+			tokens.append(newToken);
+		}
+		return tokens;
+	}
+
+	bool canJoinMetadataTokens(const QString &line, int leftEnd, int rightStart) {
+		QString separator = line.mid(leftEnd, rightStart-leftEnd);
+		QString boundaryChars = ":=,;|/\\()[]{}<>";
+		for (int i = 0; i < separator.size(); i++)
+			if (boundaryChars.contains(separator[i]))
+				return false;
+		return true;
+	}
+
+	bool metadataLineContainsCanonicalSignature(const QString &line, const QString &canonicalSignature) {
+		QVector <CanonicalToken> tokens = canonicalTokens(line);
+		for (int i = 0; i < tokens.size(); i++) {
+			QString combined;
+			for (int j = i; j < tokens.size(); j++) {
+				if (j > i && !canJoinMetadataTokens(line, tokens[j-1].end, tokens[j].start))
+					break;
+				combined.append(tokens[j].text);
+				if (combined == canonicalSignature)
+					return true;
+				if (combined.size() >= canonicalSignature.size())
+					break;
+			}
+		}
+		return false;
+	}
+
+	void addUnique(QStringList *values, const QString &value) {
+		if (!value.isEmpty() && !values->contains(value))
+			values->append(value);
+	}
+
+	QStringList isotopesInText(const QString &text) {
+		QString canonical = canonicalAlphaNum(text);
+		QStringList isotopes;
+		if (canonical.contains("i125"))
+			addUnique(&isotopes, "I125");
+		if (canonical.contains("pd103"))
+			addUnique(&isotopes, "Pd103");
+		if (canonical.contains("ir192"))
+			addUnique(&isotopes, "Ir192");
+		if (canonical.contains("cs131"))
+			addUnique(&isotopes, "Cs131");
+		return isotopes;
+	}
+
+	QStringList isotopeLines(const QString &metadata) {
+		QStringList lines = metadata.split("\n");
+		QStringList matches;
+		QRegExp isotopeLine("^\\s*Isotope\\s*:", Qt::CaseInsensitive);
+		for (int i = 0; i < lines.size(); i++)
+			if (isotopeLine.indexIn(lines[i]) == 0)
+				matches << lines[i];
+		return matches;
+	}
+
+	QString detectIsotope(const QString &metadata) {
+		QStringList explicitLines = isotopeLines(metadata);
+		QStringList isotopes;
+		if (explicitLines.size()) {
+			for (int i = 0; i < explicitLines.size(); i++) {
+				QStringList lineIsotopes = isotopesInText(explicitLines[i]);
+				for (int j = 0; j < lineIsotopes.size(); j++)
+					addUnique(&isotopes, lineIsotopes[j]);
+			}
+			return isotopes.size() == 1 ? isotopes[0] : QString();
+		}
+
+		isotopes = isotopesInText(metadata);
+		return isotopes.size() == 1 ? isotopes[0] : QString();
+	}
+
+	bool isGenericSourceToken(const QString &token) {
+		QString canonical = canonicalAlphaNum(token);
+		QStringList generic;
+		generic << "seed" << "source" << "wrapped" << "unwrapped"
+		        << "i125" << "pd103" << "ir192" << "cs131"
+		        << "125" << "103" << "192" << "131";
+		return canonical.isEmpty() || generic.contains(canonical);
+	}
+
+	QStringList sourceSignatures(const QString &sourceName) {
+		QString name = sourceName;
+		if (name.endsWith("_wrapped"))
+			name.chop(8);
+		else if (name.endsWith("_unwrapped"))
+			name.chop(10);
+
+		QStringList signatures;
+		QStringList tokens = name.split(QRegExp("[_\\s]+"), QString::SkipEmptyParts);
+		for (int i = 0; i < tokens.size(); i++) {
+			bool hasDigit = false;
+			for (int j = 0; j < tokens[i].size(); j++)
+				if (tokens[i][j].isDigit())
+					hasDigit = true;
+			if (hasDigit && !isGenericSourceToken(tokens[i]))
+				addUnique(&signatures, tokens[i]);
+		}
+		return signatures;
+	}
+
+	QStringList parenthesizedModelHints(const QString &metadata) {
+		QStringList hints;
+		QStringList lines = isotopeLines(metadata);
+		QRegExp parens("\\(([^)]*)\\)");
+		for (int i = 0; i < lines.size(); i++) {
+			int pos = 0;
+			while ((pos = parens.indexIn(lines[i], pos)) >= 0) {
+				QString hint = parens.cap(1).trimmed();
+				if (!isGenericSourceToken(hint))
+					addUnique(&hints, hint);
+				pos += parens.matchedLength();
+			}
+		}
+		return hints;
+	}
+
+	bool metadataContainsSignature(const QString &metadata, const QString &signature) {
+		QString canonicalSignature = canonicalAlphaNum(signature);
+		QStringList lines = metadata.split("\n");
+		for (int i = 0; i < lines.size(); i++)
+			if (metadataLineContainsCanonicalSignature(lines[i], canonicalSignature))
+				return true;
+		return false;
+	}
+
+	bool hintsContainSignature(const QStringList &hints, const QString &signature) {
+		QString canonicalSignature = canonicalAlphaNum(signature);
+		for (int i = 0; i < hints.size(); i++)
+			if (canonicalAlphaNum(hints[i]) == canonicalSignature)
+				return true;
+		return false;
+	}
+
+	int confidentlyMatchedSourceRow(Interface *ui, const QString &metadata) {
+		QStringList hints = parenthesizedModelHints(metadata);
+		int bestScore = 0;
+		QVector <int> bestRows;
+
+		for (int row = 0; row < ui->sourceListView->count(); row++) {
+			QString sourceName = ui->sourceListView->item(row)->text();
+			QStringList signatures = sourceSignatures(sourceName);
+			int score = 0;
+			for (int i = 0; i < signatures.size(); i++) {
+				if (hintsContainSignature(hints, signatures[i]))
+					score = qMax(score, 2);
+				else if (metadataContainsSignature(metadata, signatures[i]))
+					score = qMax(score, 1);
+			}
+
+			if (score > bestScore) {
+				bestScore = score;
+				bestRows.clear();
+				bestRows.append(row);
+			}
+			else if (score > 0 && score == bestScore) {
+				bestRows.append(row);
+			}
+		}
+
+		return bestScore > 0 && bestRows.size() == 1 ? bestRows[0] : -1;
 	}
 }
 
@@ -400,9 +696,13 @@ void Interface::connectLayout() {
 			this, SLOT(sourceRepopulate()));
 	connect(sourceShowWrapped, SIGNAL(stateChanged(int)),
 			this, SLOT(sourceRepopulate()));
+	connect(sourceScaleBox, SIGNAL(currentTextChanged(QString)),
+			this, SLOT(updateAirKermaFromSelectedTransformation()));
 	connect(sourcePermTime, SIGNAL(stateChanged(int)),
 			this, SLOT(sourceRefresh()));
 			
+	connect(transformationListView, SIGNAL(currentRowChanged(int)),
+			this, SLOT(updateRunSourceFromTransformation()));
 	connect(transformationDwell, SIGNAL(stateChanged(int)),
 			this, SLOT(transformationRefresh()));
 	connect(transformationDwellButton, SIGNAL(clicked()),
@@ -793,6 +1093,46 @@ void Interface::transformationRefresh() {
 	}
 }
 
+void Interface::updateAirKermaFromSelectedTransformation() {
+	if (!isAirKermaMode(this))
+		return;
+
+	sourceScaleEdit->clear();
+	QString transformPath;
+	if (!selectedTransformationFile(this, &transformPath))
+		return;
+
+	QString airKerma;
+	if (readAirKermaStrength(transformPath, &airKerma))
+		sourceScaleEdit->setText(airKerma);
+}
+
+void Interface::updateRunSourceFromTransformation() {
+	clearSourceSelection(this);
+	updateAirKermaFromSelectedTransformation();
+
+	QString transformPath;
+	if (!selectedTransformationFile(this, &transformPath))
+		return;
+
+	QString metadata = readDescriptiveLogMetadata(transformPath);
+	QString isotope = detectIsotope(metadata);
+	if (isotope.isEmpty())
+		return;
+
+	int isotopeIndex = sourceChooser->findText(isotope);
+	if (isotopeIndex < 0)
+		return;
+
+	if (sourceChooser->currentIndex() != isotopeIndex)
+		sourceChooser->setCurrentIndex(isotopeIndex);
+	clearSourceSelection(this);
+
+	int sourceRow = confidentlyMatchedSourceRow(this, metadata);
+	if (sourceRow >= 0)
+		sourceListView->setCurrentRow(sourceRow);
+}
+
 // Transformation functions
 void Interface::transformationLoadDwells() {
 	QString path = QFileDialog::getOpenFileName(this, tr("Load activity/dwell file"), data->gui_location+"/database/transformation/", tr("Activity File (*.dwell *.activity)"));
@@ -918,6 +1258,18 @@ void Interface::transformationLoadDwellsAuto(int i) {
 int Interface::populateEgsinp() {
 	int i = -1;
 	QString s = "";
+
+	if (sourceListView->selectedItems().size() != 1 || !sourceListView->currentItem()) {
+		QMessageBox::warning(0, "source error",
+		tr("No source selected. Select a source model before saving or running egs_brachy."));
+		return 1;
+	}
+
+	if (isAirKermaMode(this) && !parsePositiveFiniteDouble(sourceScaleEdit->text())) {
+		QMessageBox::warning(0, "air kerma error",
+		tr("Air kerma strength is missing or invalid. Select a source location with a valid Air Kerma Strength header or enter a positive value manually."));
+		return 1;
+	}
 	
 	// run control
 	egsinp->RC_ncase        = ((ebInterface*)ebInt)->ncaseEdit->text(); // GUI parameter
