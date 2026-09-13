@@ -471,8 +471,8 @@ void phantInterface::createLayout() {
 	mainLayout->addWidget(prioFrame   , 2, 0, 2, 1);
 	mainLayout->addWidget(contourFrame, 0, 1, 4, 1);
 	mainLayout->addWidget(marFrame    , 0, 2, 1, 1);
-	mainLayout->addWidget(autoConfigureProstateVpm, 2, 2, 1, 1);
-	mainLayout->addWidget(create      , 3, 2, 1, 1);
+	mainLayout->addWidget(autoConfigureProstateVpm, 3, 2, 1, 1);
+	mainLayout->addWidget(create      , 4, 2, 1, 1);
 	
 	mainLayout->setColumnStretch(0, 5);
 	mainLayout->setColumnStretch(1, 5);
@@ -699,9 +699,6 @@ void phantInterface::autoConfigureProstateVPM() {
 	fillMARvalues();
 	marContour->setChecked(false);
 	refresh();
-
-	QMessageBox::information(0, "Auto-configure prostate VPM",
-	tr("Prostate VPM settings have been configured. Review the selections, then create the virtual patient model when ready."));
 }
 
 // Pull DICOM data
