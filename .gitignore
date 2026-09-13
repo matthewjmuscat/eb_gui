@@ -13,3 +13,5 @@ configuration.txt
 database/dose/*.egsinp
 database/dose/*.3ddose
 database/transformation/*_phantom
+
+/eb_gui
