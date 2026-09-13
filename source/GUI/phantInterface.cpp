@@ -77,6 +77,14 @@ namespace {
 		return matches;
 	}
 
+	QVector <int> aiContainsMatches(const QStringList &names, const QString &target) {
+		QVector <int> matches;
+		for (int i = 0; i < names.size(); i++)
+			if (isAIAutocontour(names[i]) && names[i].contains(target, Qt::CaseInsensitive))
+				matches.append(i);
+		return matches;
+	}
+
 	int chooseMatch(QWidget *parent, const QString &role, const QStringList &names, const QVector <QVector <int> > &tiers, bool *canceled) {
 		for (int tier = 0; tier < tiers.size(); tier++) {
 			if (tiers[tier].size() == 1)
@@ -582,7 +590,7 @@ void phantInterface::autoConfigureProstateVPM() {
 	prostateTiers << exactMatches(contourNames, "Prostate_CT")
 	              << exactMatches(contourNames, "Prostate")
 	              << nonAiContainsMatches(contourNames, "prostate")
-	              << exactMatches(contourNames, "AI_RAD_Prostate");
+	              << aiContainsMatches(contourNames, "prostate");
 	int prostate = chooseMatch(this, tr("prostate"), contourNames, prostateTiers, &canceled);
 	if (canceled)
 		return;
@@ -590,7 +598,7 @@ void phantInterface::autoConfigureProstateVPM() {
 	QVector <QVector <int> > bladderTiers;
 	bladderTiers << exactMatches(contourNames, "Bladder")
 	             << nonAiContainsMatches(contourNames, "bladder")
-	             << exactMatches(contourNames, "AI_RAD_Bladder");
+	             << aiContainsMatches(contourNames, "bladder");
 	int bladder = chooseMatch(this, tr("bladder"), contourNames, bladderTiers, &canceled);
 	if (canceled)
 		return;
@@ -598,7 +606,7 @@ void phantInterface::autoConfigureProstateVPM() {
 	QVector <QVector <int> > rectumTiers;
 	rectumTiers << exactMatches(contourNames, "Rectum")
 	            << nonAiContainsMatches(contourNames, "rectum")
-	            << exactMatches(contourNames, "AI_RAD_Rectum");
+	            << aiContainsMatches(contourNames, "rectum");
 	int rectum = chooseMatch(this, tr("rectum"), contourNames, rectumTiers, &canceled);
 	if (canceled)
 		return;
