@@ -37,20 +37,51 @@
 ################################################################################
 */
 #include "interface.h"
+#include "batchEgsinp.h"
 #include "GUI/ebInterface.h"
 #include "GUI/phantInterface.h"
 #include "GUI/sourceInterface.h"
 
 #include <QtGui>
+#include <QCommandLineParser>
 #include <iostream>
 #include <math.h>
 
 int main(int argc, char **argv) {
     QApplication app(argc, argv);
+    QCoreApplication::setApplicationName("eb_gui");
+    QCoreApplication::setApplicationVersion("1.0");
+
+    QCommandLineParser parser;
+    parser.setApplicationDescription("egs_brachy GUI");
+    parser.addHelpOption();
+    QCommandLineOption batchOption(QStringList() << "batch-egsinp", "Resolved JSON manifest for batch egsinp preflight.", "manifest");
+    QCommandLineOption preflightOption(QStringList() << "preflight", "Run manifest-driven batch preflight without generating egsinp files.");
+    QCommandLineOption outputRootOption(QStringList() << "output-root", "Directory where generated egsinp files would be written.", "directory");
+    QCommandLineOption reportOption(QStringList() << "preflight-report", "Path for the JSON preflight report.", "report");
+    parser.addOption(batchOption);
+    parser.addOption(preflightOption);
+    parser.addOption(outputRootOption);
+    parser.addOption(reportOption);
+    parser.process(app);
+
+    if (parser.isSet(batchOption)) {
+        if (!parser.isSet(preflightOption)) {
+            std::cerr << "--batch-egsinp currently requires --preflight\n";
+            return 2;
+        }
+        if (parser.value(outputRootOption).trimmed().isEmpty()) {
+            std::cerr << "--output-root is required with --batch-egsinp --preflight\n";
+            return 2;
+        }
+
+        Interface w(false);
+        return runBatchEgsinpPreflight(&w, parser.value(batchOption), parser.value(outputRootOption), parser.value(reportOption));
+    }
 
     Interface w;
     w.show();
-	
+
     //connects everything
     return app.exec();
 }
