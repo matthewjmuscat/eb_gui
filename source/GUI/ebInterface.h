@@ -105,6 +105,7 @@ public:
     // Generic GUI methods
     void createLayout();
     void connectLayout();
+	int writeCurrentEgsinp(const QString &path, bool overwrite, QString *errorMessage = nullptr);
 	
 public slots:
     void refresh(); // Reset all on screen values properly
