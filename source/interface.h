@@ -88,24 +88,35 @@ class EGS_geom;
 // Interface~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // Declaration of the main window class, its variables and its methods
+struct RunInputPreflightResult {
+	bool ok = false;
+	QString transformationPath;
+	QString isotope;
+	QString source;
+	QString airKerma;
+	QStringList errors;
+};
+
 class Interface : public QWidget {
 private:
     Q_OBJECT // This line is necessary to create custom SLOTs, ie, functions
     // that define what happens when you click on buttons
 	
 public:
-    Interface();
+    Interface(bool showWindow = true);
     ~Interface();
 	
 // DATA~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~	
 public:
 	Data* data;
 	EGSInput* egsinp;
+	bool displayWindow;
 	
 public slots:
 	int populateEgsinp();
 	void updateRunSourceFromTransformation();
 	void updateAirKermaFromSelectedTransformation();
+	bool preflightSelectedRunInputs(RunInputPreflightResult *result);
 	
 // GLOBAL WIDGETS~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 public:

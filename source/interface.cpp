@@ -359,12 +359,12 @@ namespace {
 }
 
 // Constructor
-Interface::Interface()
+Interface::Interface(bool showWindow)
 // [\d*] one digit followed by:
 // 1) some number of digits
 // 2) (e|E)[+-]?\d{1,2} character e or E, an optional +, then 1-2 digits 
 // 3) .\d*(e|E)[+]?\d{1,2} dot ., some number of digits, character e or E, an optional +, then 1-2 digits 
-	: allowedNums(QRegExp(REGEX_REAL_POS)) {
+	: displayWindow(showWindow), allowedNums(QRegExp(REGEX_REAL_POS)) {
 	// Create the data backend
 	data = new Data();
 	int err = data->loadDefaults(); // load default parameters
@@ -675,9 +675,11 @@ void Interface::createLayout() {
 	setLayout(mainLayout);
     setWindowTitle("eb_gui");
 	resize(1280,720);
-    show();
-    activateWindow();
-    raise();
+	if (displayWindow) {
+		show();
+		activateWindow();
+		raise();
+	}
 }
 
 void Interface::connectLayout() {
@@ -1131,6 +1133,76 @@ void Interface::updateRunSourceFromTransformation() {
 	int sourceRow = confidentlyMatchedSourceRow(this, metadata);
 	if (sourceRow >= 0)
 		sourceListView->setCurrentRow(sourceRow);
+}
+
+bool Interface::preflightSelectedRunInputs(RunInputPreflightResult *result) {
+	if (!result)
+		return false;
+
+	*result = RunInputPreflightResult();
+
+	int airKermaIndex = sourceScaleBox->findText("Air kerma strength", Qt::MatchFixedString);
+	if (airKermaIndex < 0) {
+		result->errors << "Air kerma strength mode is not available.";
+		return false;
+	}
+	if (sourceScaleBox->currentIndex() != airKermaIndex)
+		sourceScaleBox->setCurrentIndex(airKermaIndex);
+
+	clearSourceSelection(this);
+	sourceScaleEdit->clear();
+
+	QString transformPath;
+	if (!selectedTransformationFile(this, &transformPath)) {
+		result->errors << "No source location file is selected.";
+		return false;
+	}
+	result->transformationPath = transformPath;
+
+	QString airKerma;
+	if (readAirKermaStrength(transformPath, &airKerma)) {
+		sourceScaleEdit->setText(airKerma);
+		result->airKerma = airKerma;
+	}
+	else {
+		result->errors << "Air Kerma Strength is missing, nonnumeric, non-finite, zero, or negative.";
+	}
+
+	QString metadata = readDescriptiveLogMetadata(transformPath);
+	if (metadata.isEmpty()) {
+		result->errors << "Could not read descriptive metadata from source-location log.";
+	}
+
+	QString isotope = detectIsotope(metadata);
+	if (isotope.isEmpty()) {
+		result->errors << "Isotope could not be identified uniquely from source-location metadata.";
+	}
+	else {
+		result->isotope = isotope;
+		int isotopeIndex = sourceChooser->findText(isotope);
+		if (isotopeIndex < 0) {
+			result->errors << "Detected isotope is not available in the source chooser: " + isotope;
+		}
+		else {
+			sourceChooser->setCurrentIndex(isotopeIndex);
+			sourceRepopulate();
+			clearSourceSelection(this);
+
+			int sourceRow = confidentlyMatchedSourceRow(this, metadata);
+			if (sourceRow >= 0)
+				sourceListView->setCurrentRow(sourceRow);
+			if (sourceListView->selectedItems().size() == 1 && sourceListView->currentItem())
+				result->source = sourceListView->currentItem()->text();
+			else
+				result->errors << "Source model could not be uniquely resolved from source-location metadata.";
+		}
+	}
+
+	if (!parsePositiveFiniteDouble(sourceScaleEdit->text()))
+		result->errors << "Air Kerma Strength field is not populated with a positive finite value.";
+
+	result->ok = result->errors.isEmpty();
+	return result->ok;
 }
 
 // Transformation functions
