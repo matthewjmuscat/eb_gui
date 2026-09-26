@@ -5,6 +5,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QSaveFile>
 
 namespace {
 	struct BatchJobResult {
@@ -38,7 +39,15 @@ namespace {
 		return array;
 	}
 
-	QJsonObject jobToJson(const BatchJobResult &job) {
+	QString jobLabel(const BatchJobResult &job) {
+		return job.jobId.isEmpty() ? QString("row_%1").arg(job.row) : job.jobId;
+	}
+
+	bool jobFails(const BatchJobResult &job, bool manifestBlocked) {
+		return manifestBlocked || !job.errors.isEmpty();
+	}
+
+	QJsonObject jobToJson(const BatchJobResult &job, bool manifestBlocked) {
 		QJsonObject object;
 		object["row"] = job.row;
 		object["job_id"] = job.jobId;
@@ -53,7 +62,8 @@ namespace {
 		object["tg186_output"] = job.tg186Output;
 		object["tg43_path"] = job.tg43Path;
 		object["tg186_path"] = job.tg186Path;
-		object["status"] = job.errors.isEmpty() ? "pass" : "fail";
+		object["status"] = jobFails(job, manifestBlocked) ? "fail" : "pass";
+		object["manifest_blocked"] = manifestBlocked;
 		object["errors"] = stringListToJson(job.errors);
 		object["warnings"] = stringListToJson(job.warnings);
 		return object;
@@ -138,31 +148,41 @@ namespace {
 		}
 	}
 
-	void printJobSummary(const BatchJobResult &job) {
+	void printJobSummary(const BatchJobResult &job, bool manifestBlocked) {
 		QTextStream out(stdout);
-		if (job.errors.isEmpty()) {
-			out << job.jobId << " PASS"
+		if (!jobFails(job, manifestBlocked)) {
+			out << jobLabel(job) << " PASS"
 			    << " isotope=" << job.isotope
 			    << " source=" << job.source
 			    << " air_kerma=" << job.airKerma << "\n";
 			return;
 		}
 
-		out << job.jobId << " FAIL";
+		out << jobLabel(job) << " FAIL";
 		for (int i = 0; i < job.errors.size(); i++)
 			out << (i == 0 ? ": " : "; ") << job.errors[i];
+		if (manifestBlocked)
+			out << (job.errors.isEmpty() ? ": " : "; ") << "Blocked by manifest errors.";
 		out << "\n";
 	}
 
 	bool writeJsonReport(const QString &path, const QJsonObject &report, QString *errorMessage) {
-		QFile file(path);
+		QSaveFile file(path);
 		if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
 			*errorMessage = "Failed to open preflight report for writing: " + path + "\n" + file.errorString();
 			return false;
 		}
 
-		file.write(QJsonDocument(report).toJson(QJsonDocument::Indented));
-		file.write("\n");
+		QByteArray bytes = QJsonDocument(report).toJson(QJsonDocument::Indented);
+		bytes.append('\n');
+		if (file.write(bytes) != bytes.size()) {
+			*errorMessage = "Failed to write complete preflight report: " + path + "\n" + file.errorString();
+			return false;
+		}
+		if (!file.commit()) {
+			*errorMessage = "Failed to commit preflight report: " + path + "\n" + file.errorString();
+			return false;
+		}
 		return true;
 	}
 }
@@ -188,6 +208,21 @@ int runBatchEgsinpPreflight(Interface *ui, const QString &manifestPath, const QS
 	QVector <BatchJobResult> jobs;
 	QStringList manifestErrors;
 
+	QJsonValue schemaVersion = manifest.value("schema_version");
+	if (!manifest.contains("schema_version")) {
+		manifestErrors << "Manifest schema_version is required and must be 1.";
+	}
+	else if (!schemaVersion.isDouble()) {
+		manifestErrors << "Manifest schema_version must be the integer 1.";
+	}
+	else {
+		int version = schemaVersion.toInt(-1);
+		if (schemaVersion.toDouble() != static_cast<double>(version))
+			manifestErrors << "Manifest schema_version must be the integer 1.";
+		else if (version != 1)
+			manifestErrors << QString("Unsupported manifest schema_version: %1").arg(version);
+	}
+
 	QDir outputDir(outputRoot);
 	bool outputRootOk = outputDir.exists();
 	if (outputRoot.trimmed().isEmpty())
@@ -197,8 +232,11 @@ int runBatchEgsinpPreflight(Interface *ui, const QString &manifestPath, const QS
 
 	if (!manifest.value("jobs").isArray())
 		manifestErrors << "Manifest must contain a jobs array.";
+	else if (manifestJobs.isEmpty())
+		manifestErrors << "Manifest jobs array must contain at least one job.";
 
 	QMap <QString, int> seenOutputs;
+	QMap <QString, int> seenJobIds;
 	for (int i = 0; i < manifestJobs.size(); i++) {
 		BatchJobResult job;
 		job.row = i;
@@ -212,8 +250,6 @@ int runBatchEgsinpPreflight(Interface *ui, const QString &manifestPath, const QS
 
 		QJsonObject object = manifestJobs[i].toObject();
 		job.jobId = jsonString(object, "job_id");
-		if (job.jobId.isEmpty())
-			job.jobId = QString("row_%1").arg(i);
 		job.vpm = jsonString(object, "vpm");
 		job.transformation = jsonString(object, "transformation");
 		QJsonObject outputs = object.value("outputs").toObject();
@@ -222,6 +258,19 @@ int runBatchEgsinpPreflight(Interface *ui, const QString &manifestPath, const QS
 
 		jobs.append(job);
 		int jobIndex = jobs.size()-1;
+		if (jobs[jobIndex].jobId.isEmpty()) {
+			jobs[jobIndex].errors << "job_id is required.";
+		}
+		else if (seenJobIds.contains(jobs[jobIndex].jobId)) {
+			int firstIndex = seenJobIds.value(jobs[jobIndex].jobId);
+			QString message = "Duplicate job_id: " + jobs[jobIndex].jobId;
+			jobs[jobIndex].errors << message;
+			if (firstIndex >= 0 && firstIndex < jobs.size())
+				jobs[firstIndex].errors << message;
+		}
+		else {
+			seenJobIds.insert(jobs[jobIndex].jobId, jobIndex);
+		}
 		if (jobs[jobIndex].vpm.isEmpty())
 			jobs[jobIndex].errors << "vpm is required.";
 		if (jobs[jobIndex].transformation.isEmpty())
@@ -244,14 +293,13 @@ int runBatchEgsinpPreflight(Interface *ui, const QString &manifestPath, const QS
 			jobs[jobIndex].airKerma = runInputs.airKerma;
 			jobs[jobIndex].errors << runInputs.errors;
 		}
-
-		printJobSummary(jobs[jobIndex]);
 	}
 
+	bool manifestBlocked = !manifestErrors.isEmpty();
 	int passCount = 0;
 	int failCount = 0;
 	for (int i = 0; i < jobs.size(); i++) {
-		if (jobs[i].errors.isEmpty() && manifestErrors.isEmpty())
+		if (!jobFails(jobs[i], manifestBlocked))
 			passCount++;
 		else
 			failCount++;
@@ -259,7 +307,7 @@ int runBatchEgsinpPreflight(Interface *ui, const QString &manifestPath, const QS
 
 	QJsonArray jobArray;
 	for (int i = 0; i < jobs.size(); i++)
-		jobArray.append(jobToJson(jobs[i]));
+		jobArray.append(jobToJson(jobs[i], manifestBlocked));
 
 	QJsonObject summary;
 	summary["total"] = jobs.size();
@@ -268,6 +316,7 @@ int runBatchEgsinpPreflight(Interface *ui, const QString &manifestPath, const QS
 
 	QJsonObject report;
 	report["schema_version"] = 1;
+	report["status"] = manifestBlocked || failCount > 0 ? "fail" : "pass";
 	report["mode"] = "preflight";
 	report["manifest_path"] = QFileInfo(manifestPath).absoluteFilePath();
 	report["output_root"] = QFileInfo(outputRoot).absoluteFilePath();
@@ -284,7 +333,13 @@ int runBatchEgsinpPreflight(Interface *ui, const QString &manifestPath, const QS
 		return 2;
 	}
 
-	out << "Preflight: " << passCount << " valid, " << failCount << " invalid\n";
+	for (int i = 0; i < jobs.size(); i++)
+		printJobSummary(jobs[i], manifestBlocked);
+
+	out << "Preflight: " << passCount << " valid, " << failCount << " invalid";
+	if (manifestBlocked)
+		out << " (manifest invalid)";
+	out << "\n";
 	out << "No .egsinp files generated.\n";
 	out << "report=" << finalReportPath << "\n";
 
@@ -293,5 +348,5 @@ int runBatchEgsinpPreflight(Interface *ui, const QString &manifestPath, const QS
 			err << "ERROR " << manifestErrors[i] << "\n";
 	}
 
-	return failCount == 0 && manifestErrors.isEmpty() ? 0 : 1;
+	return failCount == 0 && !manifestBlocked ? 0 : 1;
 }
