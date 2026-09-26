@@ -55,28 +55,39 @@ int main(int argc, char **argv) {
     QCommandLineParser parser;
     parser.setApplicationDescription("egs_brachy GUI");
     parser.addHelpOption();
-    QCommandLineOption batchOption(QStringList() << "batch-egsinp", "Resolved JSON manifest for batch egsinp preflight.", "manifest");
+    QCommandLineOption batchOption(QStringList() << "batch-egsinp", "Resolved JSON manifest for batch egsinp preflight or generation.", "manifest");
     QCommandLineOption preflightOption(QStringList() << "preflight", "Run manifest-driven batch preflight without generating egsinp files.");
+    QCommandLineOption generateOption(QStringList() << "generate", "Generate egsinp files from a resolved manifest after full-batch preflight.");
     QCommandLineOption outputRootOption(QStringList() << "output-root", "Directory where generated egsinp files would be written.", "directory");
-    QCommandLineOption reportOption(QStringList() << "preflight-report", "Path for the JSON preflight report.", "report");
+    QCommandLineOption reportOption(QStringList() << "batch-report", "Path for the JSON batch report.", "report");
+    QCommandLineOption preflightReportOption(QStringList() << "preflight-report", "Path for the JSON preflight report.", "report");
     parser.addOption(batchOption);
     parser.addOption(preflightOption);
+    parser.addOption(generateOption);
     parser.addOption(outputRootOption);
     parser.addOption(reportOption);
+    parser.addOption(preflightReportOption);
     parser.process(app);
 
     if (parser.isSet(batchOption)) {
-        if (!parser.isSet(preflightOption)) {
-            std::cerr << "--batch-egsinp currently requires --preflight\n";
+        if (parser.isSet(preflightOption) == parser.isSet(generateOption)) {
+            std::cerr << "--batch-egsinp requires exactly one of --preflight or --generate\n";
             return 2;
         }
         if (parser.value(outputRootOption).trimmed().isEmpty()) {
-            std::cerr << "--output-root is required with --batch-egsinp --preflight\n";
+            std::cerr << "--output-root is required with --batch-egsinp\n";
+            return 2;
+        }
+        if (parser.isSet(reportOption) && parser.isSet(preflightReportOption)) {
+            std::cerr << "Use only one of --batch-report or --preflight-report\n";
             return 2;
         }
 
+        QString reportPath = parser.isSet(reportOption) ? parser.value(reportOption) : parser.value(preflightReportOption);
         Interface w(false);
-        return runBatchEgsinpPreflight(&w, parser.value(batchOption), parser.value(outputRootOption), parser.value(reportOption));
+        if (parser.isSet(generateOption))
+            return runBatchEgsinpGenerate(&w, parser.value(batchOption), parser.value(outputRootOption), reportPath);
+        return runBatchEgsinpPreflight(&w, parser.value(batchOption), parser.value(outputRootOption), reportPath);
     }
 
     Interface w;
