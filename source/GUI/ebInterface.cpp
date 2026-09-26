@@ -37,6 +37,7 @@
 ################################################################################
 */
 #include "ebInterface.h"
+#include <QSaveFile>
 
 // Constructors
 ebInterface::ebInterface()
@@ -439,6 +440,44 @@ void ebInterface::loadMuen() {
 	muenEdit->setToolTip(path);
 }
 
+int ebInterface::writeCurrentEgsinp(const QString &path, bool overwrite, QString *errorMessage) {
+	if (errorMessage)
+		errorMessage->clear();
+
+	if (!overwrite && QFile::exists(path)) {
+		if (errorMessage)
+			*errorMessage = tr("An egsinp file already exists:\n") + path;
+		return 1;
+	}
+
+	if (parent->populateEgsinp()) // Build egsinp
+		return 1; // Quit if error was encountered
+
+	QSaveFile egsinpFile(path);
+	if (!egsinpFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+		if (errorMessage)
+			*errorMessage = tr("Failed to create file:\n") + path + "\n" + egsinpFile.errorString();
+		return 1;
+	}
+
+	QTextStream output(&egsinpFile);
+	output << parent->egsinp->buildInput();
+	if (output.status() != QTextStream::Ok) {
+		if (errorMessage)
+			*errorMessage = tr("Failed while writing file:\n") + path;
+		egsinpFile.cancelWriting();
+		return 1;
+	}
+
+	if (!egsinpFile.commit()) {
+		if (errorMessage)
+			*errorMessage = tr("Failed to save file:\n") + path + "\n" + egsinpFile.errorString();
+		return 1;
+	}
+
+	return 0;
+}
+
 // Console functions
 void ebInterface::runEB() {
 	// Is there currently a selected phantom, source, and transformation file
@@ -472,30 +511,17 @@ void ebInterface::runEB() {
 	// Create the egsinp file
 	ebName = fileNameEdit->text();
     QString egsinp_path = parent->data->eb_location + "/" + ebName + ".egsinp";
-	QFile egsinp(egsinp_path);
 	
-	if (egsinp.exists()) {
-		if (QMessageBox::Yes == QMessageBox::question(this, "Name already found",
-			tr("An egsinp file named ") + ebName + tr(" already exists.  Would you like to overwrite it?"))) {
-			// Delete file
-			egsinp.remove();
-		}
-		else { // They did not proceed
-			return;
-		}
+	if (QFile::exists(egsinp_path) && QMessageBox::Yes != QMessageBox::question(this, "Name already found",
+		tr("An egsinp file named ") + ebName + tr(" already exists.  Would you like to overwrite it?")))
+		return;
+	
+	QString errorMessage;
+	if (writeCurrentEgsinp(egsinp_path, true, &errorMessage)) {
+		if (!errorMessage.isEmpty())
+			QMessageBox::information(0, "egsinp file error", errorMessage);
+		return;
 	}
-	
-    if (!egsinp.open(QIODevice::WriteOnly | QIODevice::Text)) {
-		QMessageBox::information(0, "egsinp file error",
-        tr("Failed to create and open file:\n") + egsinp_path + tr("for simulations."));
-        return;
-	}
-	
-	if (parent->populateEgsinp()) // Build egsinp
-		return; // Quit if error was encountered
-	
-	QTextStream output(&egsinp);
-	output << parent->egsinp->buildInput();
 	
 	ebKillFlag = false; // Reset kill flag, tells user if job failed or was killed
 	ebProcess->setWorkingDirectory(parent->data->eb_location); // Go to eb directory
@@ -549,31 +575,16 @@ void ebInterface::saveEB() {
 	if (!egsinpPath.endsWith(".egsinp"))
 		egsinpPath += ".egsinp";
 	
-	QFile egsinpFile(egsinpPath);
-	if (egsinpFile.exists()) {
-		if (QMessageBox::Yes == QMessageBox::question(this, "Name already found",
-			tr("An egsinp file named ") + ebName + tr(" already exists.  Would you like to overwrite it?"))) {
-			// Delete file
-			egsinpFile.remove();
-		}
-		else { // They did not proceed
-			return;
-		}
+	if (QFile::exists(egsinpPath) && QMessageBox::Yes != QMessageBox::question(this, "Name already found",
+		tr("An egsinp file named ") + ebName + tr(" already exists.  Would you like to overwrite it?")))
+		return;
+	
+	QString errorMessage;
+	if (writeCurrentEgsinp(egsinpPath, true, &errorMessage)) {
+		if (!errorMessage.isEmpty())
+			QMessageBox::information(0, "egsinp file error", errorMessage);
+		return;
 	}
-	
-    if (!egsinpFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
-		QMessageBox::information(0, "egsinp file error",
-        tr("Failed to create file:\n")
-		+ egsinpPath + "\n" +
-		tr("for simulations."));
-        return;
-	}
-	
-	if (parent->populateEgsinp()) // Build egsinp
-		return; // Quit if error was encountered
-	
-	QTextStream output(&egsinpFile);
-	output << parent->egsinp->buildInput();
 }
 
 void ebInterface::saveLogEB() {
@@ -625,20 +636,12 @@ void ebInterface::runEV() {
 	
 	// Create the egsinp file
 	QString egsinp_path = parent->data->eb_location + "/" + ebName + ".preview.egsinp";
-	QFile egsinpFile(egsinp_path);
-	egsinpFile.remove();
-	
-    if (!egsinpFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
-		QMessageBox::information(0, "egsinp file error",
-        tr("Failed to create file:\n") + egsinp_path + "\n" + tr("for simulations."));
-        return;
+	QString errorMessage;
+	if (writeCurrentEgsinp(egsinp_path, true, &errorMessage)) {
+		if (!errorMessage.isEmpty())
+			QMessageBox::information(0, "egsinp file error", errorMessage);
+		return;
 	}
-	
-	if (parent->populateEgsinp()) // Build egsinp
-		return; // Quit if error was encountered
-	
-	QTextStream output(&egsinpFile);
-	output << parent->egsinp->buildInput();
 	
 	evProcess->setWorkingDirectory(parent->data->eb_location); // Go to eb directory
 	
