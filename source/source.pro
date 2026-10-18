@@ -23,6 +23,7 @@ DEFINES += QT_DEPRECATED_WARNINGS
 # Input
 HEADERS += data.h \
            batchEgsinp.h \
+           export_runner.h \
            interface.h \
            data/DICOM.h \
            data/dose.h \
@@ -36,6 +37,7 @@ HEADERS += data.h \
            libraries/gzstream.h
 SOURCES += data.cpp \
            batchEgsinp.cpp \
+           export_runner.cpp \
            interface.cpp \
            main.cpp \
            data/database.cpp \

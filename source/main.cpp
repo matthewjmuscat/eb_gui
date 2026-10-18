@@ -38,6 +38,7 @@
 */
 #include "interface.h"
 #include "batchEgsinp.h"
+#include "export_runner.h"
 #include "GUI/ebInterface.h"
 #include "GUI/phantInterface.h"
 #include "GUI/sourceInterface.h"
@@ -61,13 +62,30 @@ int main(int argc, char **argv) {
     QCommandLineOption outputRootOption(QStringList() << "output-root", "Directory where generated egsinp files would be written.", "directory");
     QCommandLineOption reportOption(QStringList() << "batch-report", "Path for the JSON batch report.", "report");
     QCommandLineOption preflightReportOption(QStringList() << "preflight-report", "Path for the JSON preflight report.", "report");
+    QCommandLineOption exportManifestOption(QStringList() << "export-manifest", "Run headless Export Results jobs from a JSON manifest.", "manifest");
+    QCommandLineOption exportReportOption(QStringList() << "export-report", "Write a JSON report for the headless export run.", "report");
     parser.addOption(batchOption);
     parser.addOption(preflightOption);
     parser.addOption(generateOption);
     parser.addOption(outputRootOption);
     parser.addOption(reportOption);
     parser.addOption(preflightReportOption);
+    parser.addOption(exportManifestOption);
+    parser.addOption(exportReportOption);
     parser.process(app);
+
+    if (parser.isSet(exportManifestOption)) {
+        if (parser.isSet(batchOption) || parser.isSet(preflightOption) || parser.isSet(generateOption) ||
+            parser.isSet(outputRootOption) || parser.isSet(reportOption) || parser.isSet(preflightReportOption)) {
+            std::cerr << "--export-manifest cannot be combined with batch egsinp options\n";
+            return 2;
+        }
+        return runExportManifest(parser.value(exportManifestOption), parser.value(exportReportOption));
+    }
+    if (parser.isSet(exportReportOption)) {
+        std::cerr << "--export-report requires --export-manifest\n";
+        return 2;
+    }
 
     if (parser.isSet(batchOption)) {
         if (parser.isSet(preflightOption) == parser.isSet(generateOption)) {
