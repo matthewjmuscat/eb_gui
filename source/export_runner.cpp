@@ -191,6 +191,11 @@ static ExportJobResult runOneExportJob(const QJsonObject &job, Data *data) {
 	QVector<ExportContour> contours = contoursFromJob(job, &result.errors);
 	if (!result.errors.isEmpty())
 		return result;
+	QFileInfo doseInfo(dosePath);
+	if (!doseInfo.isFile() || !doseInfo.isReadable()) {
+		result.errors.append("Selected dose file is missing or unreadable: " + dosePath);
+		return result;
+	}
 
 	Dose doseData;
 	if (dosePath.endsWith(".b3ddose"))
