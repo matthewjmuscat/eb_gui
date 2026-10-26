@@ -173,14 +173,13 @@ int DICOM::parse(QString p) {
 				std::cout << "Misreading sequence delimiters as top level data elements, something has gone wrong\n";
                 std::cout << "Perhaps you can try enabling/disabling ALLOW_LOOSE_CUSTOM_TAGS in DICOM.cpp and recompiling\n";
                 std::cout << "quitting\n";
-				delete[] dat;
+				delete temp;
                 file.close();
                 return 202;
 			}
 			
 			// Find the closest tag in the database
 			Reference closest = lib->binSearch(temp->tag[0], temp->tag[1], 0, lib->lib.size()-1);
-            QString tempVR = QString(dat[0])+dat[1];
 			if (closest.tag[0] == temp->tag[0] && closest.tag[1] == temp->tag[1]) { // Found the tag
                 temp->desc = closest.title;
                 l++;
