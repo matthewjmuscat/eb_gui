@@ -575,7 +575,7 @@ int DICOM::readSequence(QDataStream *in, Attribute *att) {
 				// Is there a subsequence we are parsing
 				if (*(unsigned int*)(buffer.right(4).data()) == (unsigned int)0xFFFFFFFF) {
 					if (!isImplicit) {
-						if (*(unsigned int*)(buffer.right(8).left(4).data()) == (unsigned int)0x00005351) {
+						if (buffer.right(8).left(4) == QByteArray("SQ\0\0", 4)) {
 							depth++; // Increase depth to skip delimiters until we exit subsequence
 							
 							#if defined(OUTPUT_PARSE_SQ)
@@ -712,7 +712,7 @@ int DICOM::readDefinedSequence(QDataStream *in, Attribute *att, unsigned long in
 				// Is there a subsequence we are parsing
 				if (*(unsigned int*)(buffer.right(4).data()) == (unsigned int)0xFFFFFFFF) {
 					if (!isImplicit) {
-						if (*(unsigned int*)(buffer.right(8).left(4).data()) == (unsigned int)0x00005351) {
+						if (buffer.right(8).left(4) == QByteArray("SQ\0\0", 4)) {
 							depth++; // Increase depth to skip delimiters until we exit subsequence	
 							
 							#if defined(OUTPUT_PARSE_SQ)
