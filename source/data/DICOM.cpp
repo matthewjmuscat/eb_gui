@@ -767,7 +767,7 @@ int DICOM::readDefinedSequence(QDataStream *in, Attribute *att, unsigned long in
                         dat[i] = buffer[i];
                     }
                     att->seq.items.append(new SequenceItem(buffer.size(),dat));
-					n-=buffer.size();
+					n-=buffer.size()+8;
 					
 					#if defined(OUTPUT_PARSE_SQ)
 						std::cout << "\tSequence successfully parsed and stored\n";
