@@ -573,7 +573,7 @@ int DICOM::readSequence(QDataStream *in, Attribute *att) {
 				#endif
 				
 				// Is there a subsequence we are parsing
-				if (*(unsigned int*)(buffer.right(4).data()) == (unsigned int)0xFFFFFFFF) {
+				if (buffer.endsWith(QByteArray("\xFF\xFF\xFF\xFF", 4))) {
 					if (!isImplicit) {
 						if (*(unsigned int*)(buffer.right(8).left(4).data()) == (unsigned int)0x00005351) {
 							depth++; // Increase depth to skip delimiters until we exit subsequence
@@ -610,7 +610,7 @@ int DICOM::readSequence(QDataStream *in, Attribute *att) {
 				}
 				
                 // ...until we reach the sequence item delimiter
-                if (*((unsigned int*)buffer.right(4).data()) == (unsigned int)0xE00DFFFE && !depth) {
+				if (buffer.endsWith(QByteArray("\xFE\xFF\x0D\xE0", 4)) && !depth) {
 					#if defined(OUTPUT_PARSE_SQ)
 						std::cout << "\tFound exit sequence E00DFFFE at 0 depth\n";
 					#endif
@@ -637,7 +637,7 @@ int DICOM::readSequence(QDataStream *in, Attribute *att) {
 					
                     break;
                 }
-				else if (*((unsigned int*)buffer.right(4).data()) == (unsigned int)0xE0DDFFFE) {
+				else if (buffer.endsWith(QByteArray("\xFE\xFF\xDD\xE0", 4))) {
 					depth--;
 					
 					#if defined(OUTPUT_PARSE_SQ)
@@ -710,7 +710,7 @@ int DICOM::readDefinedSequence(QDataStream *in, Attribute *att, unsigned long in
 				#endif
 				
 				// Is there a subsequence we are parsing
-				if (*(unsigned int*)(buffer.right(4).data()) == (unsigned int)0xFFFFFFFF) {
+				if (buffer.endsWith(QByteArray("\xFF\xFF\xFF\xFF", 4))) {
 					if (!isImplicit) {
 						if (*(unsigned int*)(buffer.right(8).left(4).data()) == (unsigned int)0x00005351) {
 							depth++; // Increase depth to skip delimiters until we exit subsequence	
@@ -747,7 +747,7 @@ int DICOM::readDefinedSequence(QDataStream *in, Attribute *att, unsigned long in
 				}
 				
                 // ...until we reach the sequence item delimiter
-                if (*((unsigned int*)buffer.right(4).data()) == (unsigned int)0xE00DFFFE && !depth) {
+				if (buffer.endsWith(QByteArray("\xFE\xFF\x0D\xE0", 4)) && !depth) {
                     #if defined(OUTPUT_PARSE_SQ)
 						std::cout << "\tFound exit sequence E00DFFFE at 0 depth\n";
 					#endif
@@ -775,7 +775,7 @@ int DICOM::readDefinedSequence(QDataStream *in, Attribute *att, unsigned long in
 					
                     break;
                 }
-				else if (*((unsigned int*)buffer.right(4).data()) == (unsigned int)0xE0DDFFFE) {
+				else if (buffer.endsWith(QByteArray("\xFE\xFF\xDD\xE0", 4))) {
 					depth--;
 				
 					#if defined(OUTPUT_PARSE_SQ)
