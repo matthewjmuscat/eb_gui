@@ -95,7 +95,7 @@ bool testDefinedSequenceWithUndefinedItem(DICOM &dicom) {
     Attribute attribute;
 
     int result = dicom.readDefinedSequence(&stream, &attribute, data.size());
-    if (result != 0 || buffer.pos() != data.size() || attribute.seq.items.size() != 1) {
+    if (result != 1 || buffer.pos() != data.size() || attribute.seq.items.size() != 1) {
         std::cerr << "Defined sequence nested SQ recognition failed: result=" << result
                   << ", position=" << buffer.pos() << "/" << data.size()
                   << ", items=" << attribute.seq.items.size() << "\n";
