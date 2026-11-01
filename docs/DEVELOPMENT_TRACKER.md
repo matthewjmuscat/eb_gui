@@ -257,16 +257,21 @@ remain separate changes; implementing one does not validate the others.
 - **Problem:** Non-permanent plans currently treat cumulative time-weight
   differences as seconds. Each channel instead requires
   `ChannelTotalTime * delta_weight / final_weight`.
-- **Branch/commit:** Proposed `fix/hdr-rtplan-channel-timing`; not implemented.
-- **Fork/upstream:** Not pushed; upstream contribution planned after independent
-  review.
+- **Branch/commit:** Implemented on `fix/hdr-rtplan-channel-timing` at
+  `a6615521e568799b51168131979acca8418d6499` from upstream
+  `18d059fafb5abb298b4b218afd712f83d11f19ce`.
+- **Fork/upstream:** Pushed to the fork; upstream contribution planned after
+  independent review, with no PR submitted.
 - **CIHR:** Not applicable to the permanent-LDR workflow; no integration planned
   without regression evidence.
 - **HDR/deployment:** Not integrated; no HDR binary deployed.
-- **Validation required:** Synthetic single-channel and independently normalized
-  multi-channel HDR cases, invalid-input rejection, permanent-LDR regression,
-  build, and sanitizers.
-- **Next action:** Implement as the first independent HDR correction.
+- **Validation:** Seven synthetic test groups passed, including single-channel
+  and independently normalized multi-channel HDR, invalid-input rejection,
+  atomic error output, and permanent-LDR weighted-position regression. The full
+  Qt application built successfully; the focused suite passed AddressSanitizer,
+  leak detection, and UndefinedBehaviorSanitizer.
+- **Next action:** Review the independent correction before any integration into
+  `hdr-lung/development` or upstream PR submission.
 
 ### HDR-002: Atomic dwell/activity loading and scaling state
 
