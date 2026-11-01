@@ -11,6 +11,11 @@ development streams:
 The two project streams share reviewed general-purpose fixes selectively. They
 do not automatically inherit one another's project-specific functionality.
 
+`DEVELOPMENT_TRACKER.md` is the authoritative public-safe record of what has
+been implemented, tested, integrated, deployed, proposed upstream, or merged.
+Consult it before starting work and update it whenever one of those states
+changes.
+
 ## Change classification
 
 ### General-purpose fixes
@@ -127,6 +132,12 @@ treatment information, absolute workstation paths, institutional data
 locations, credentials, private database inventories, internal archival
 procedures, or personal contact information. Keep operational details in the
 private coordination repository or ignored local records.
+
+Close each feature task with a separate tracker update on
+`hdr-lung/development`. Record exact commits and distinguish implementation,
+independent testing, research-branch integration, binary deployment, and
+upstream merge status. Do not place governance or tracker commits in an
+upstream-facing fix branch.
 
 Filesystem cleanup, Git history changes, deployments, and upstream PR creation
 are explicit approval gates.

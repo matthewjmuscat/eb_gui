@@ -1,8 +1,8 @@
 # Agent Instructions
 
 These instructions apply to the entire repository. Read
-`docs/DEVELOPMENT.md` before changing code, building, deploying, or cleaning
-files.
+`docs/DEVELOPMENT.md` and `docs/DEVELOPMENT_TRACKER.md` before changing code,
+building, deploying, or cleaning files.
 
 ## Required preflight
 
@@ -43,6 +43,9 @@ the explicitly approved isolated runtime.
 - Treat generated code as unvalidated until it has been reviewed and tested.
 - Record source commit, executable SHA-256, runtime, and validation status for
   every deployed build.
+- Update `docs/DEVELOPMENT_TRACKER.md` on `hdr-lung/development` whenever a
+  feature or correction changes implementation, test, integration, deployment,
+  or upstream status. Do not add the tracker to an upstream-facing fix branch.
 
 ## Upstream contributions
 
