@@ -24,6 +24,7 @@ DEFINES += QT_DEPRECATED_WARNINGS
 HEADERS += data.h \
            interface.h \
            data/DICOM.h \
+           data/planTiming.h \
            data/dose.h \
            data/egsphant.h \
            data/input.h \
@@ -38,6 +39,7 @@ SOURCES += data.cpp \
            main.cpp \
            data/database.cpp \
            data/DICOM.cpp \
+           data/planTiming.cpp \
            data/dose.cpp \
            data/egsphant.cpp \
            data/input.cpp \

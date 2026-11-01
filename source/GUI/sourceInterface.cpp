@@ -407,6 +407,30 @@ void sourceInterface::parsePlan() {
 	else if (err == 303)
 		QMessageBox::warning(0, "DICOM error",
         tr("Could not find field ") + "Brachy Control Point Sequence (300A, 02D0)" + tr (" in CT DICOM file.  DICOM parsing aborted."));
+	else if (err == 304)
+		QMessageBox::warning(0, "DICOM error",
+        tr("Brachy control point positions or weights are incomplete or invalid. DICOM parsing aborted."));
+	else if (err == 305)
+		QMessageBox::warning(0, "DICOM error",
+        tr("Channel Total Time (300A, 0286) is missing or invalid. DICOM parsing aborted."));
+	else if (err == 306)
+		QMessageBox::warning(0, "DICOM error",
+        tr("Final Cumulative Time Weight (300A, 02C8) is missing or invalid. DICOM parsing aborted."));
+	else if (err == 307)
+		QMessageBox::warning(0, "DICOM error",
+        tr("Cumulative Time Weight values are nonmonotonic. DICOM parsing aborted."));
+	else if (err == 308)
+		QMessageBox::warning(0, "DICOM error",
+        tr("A zero-duration dwell interval was found. DICOM parsing aborted."));
+	else if (err == 309)
+		QMessageBox::warning(0, "DICOM error",
+        tr("The plan uses a missing or unsupported source reference. DICOM parsing aborted."));
+	else if (err == 310)
+		QMessageBox::warning(0, "DICOM error",
+        tr("Final Cumulative Time Weight does not match the control points. DICOM parsing aborted."));
+	else if (err == 311)
+		QMessageBox::warning(0, "DICOM error",
+        tr("A nonzero source-transit interval is not supported. DICOM parsing aborted."));
 	else if (err == 401)
 		QMessageBox::warning(0, "Seed count error",
         tr("Found some seed dwell times but number doesn't match the overall seed count.  DICOM parsing aborted."));

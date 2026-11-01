@@ -43,6 +43,7 @@
 struct stat info; // required struct for using sys/stat
 
 #include "data.h"
+#include "data/planTiming.h"
 #include "interface.h" // Needed for some compiler variables
 
 //#define DEBUG_BUILDEGSPHANT // Comment out
@@ -55,6 +56,21 @@ struct stat info; // required struct for using sys/stat
 bool exists(QString path){
     std::string str = path.toStdString();
     return stat(str.c_str(), &info) == 0;
+}
+
+int planTimingErrorCode(PlanTiming::Result result) {
+	switch (result) {
+		case PlanTiming::InvalidControlPointData: return 304;
+		case PlanTiming::InvalidChannelTotalTime: return 305;
+		case PlanTiming::InvalidFinalCumulativeTimeWeight: return 306;
+		case PlanTiming::NonmonotonicCumulativeTimeWeight: return 307;
+		case PlanTiming::ZeroDurationDwell: return 308;
+		case PlanTiming::UnsupportedSourceReference: return 309;
+		case PlanTiming::FinalCumulativeTimeWeightMismatch: return 310;
+		case PlanTiming::UnsupportedTransitTime: return 311;
+		case PlanTiming::Success: return 0;
+	}
+	return 304;
 }
 
 void Data::expand_env_var(QString& str, const QString& var){
@@ -1193,6 +1209,7 @@ int Data::parsePlan(QString* log) {
 	QStringList pointData2;
 	QString treatDate = "", kermaDate = "";
 	QString treatTime = "", kermaTime = "";
+	QSet<int> sourceNumbers;
 	
 	// Reset plan data variables to default to know what worked
 	treatmentType = "UNKNOWN";
@@ -1274,6 +1291,7 @@ int Data::parsePlan(QString* log) {
 				return 103;
 			}
 
+			QString tempN   = ""; // Get the source number
 			QString tempS   = ""; // Get the air kerma
 			QString tempI   = ""; // Get the half life
 			QString tempE   = ""; // Get the isotope name
@@ -1281,7 +1299,10 @@ int Data::parsePlan(QString* log) {
 			QString tempD   = ""; // Get date data
 			QString tempT   = ""; // Get time data
 			for (int l = 0; l < att->size(); l++) {
-				if (att->at(l)->tag[0] == 0x300A && att->at(l)->tag[1] == 0x022A)
+				if (att->at(l)->tag[0] == 0x300A && att->at(l)->tag[1] == 0x0212)
+					for (unsigned int s = 0; s < att->at(l)->vl; s++)
+						tempN.append(att->at(l)->vf[s]);
+				else if (att->at(l)->tag[0] == 0x300A && att->at(l)->tag[1] == 0x022A)
 					for (unsigned int s = 0; s < att->at(l)->vl; s++)
 						tempS.append(att->at(l)->vf[s]);
 				else if (att->at(l)->tag[0] == 0x300A && att->at(l)->tag[1] == 0x0228)
@@ -1317,6 +1338,10 @@ int Data::parsePlan(QString* log) {
 						tempT.append(att->at(l)->vf[s]);
 			}
 
+			bool sourceNumberOk = false;
+			int sourceNumber = tempN.trimmed().toInt(&sourceNumberOk);
+			if (sourceNumberOk)
+				sourceNumbers.insert(sourceNumber);
 			if (airKerma == -1 && tempS != "")
 				airKerma = tempS.toDouble();
 			if (halfLife == -1 && tempI != "")
@@ -1397,12 +1422,9 @@ int Data::parsePlan(QString* log) {
 	
 	QVector<double> tempDwellTimes;
 	QVector<QVector3D> tempPositions;
-	double tempTotalDwellTime;
-	QVector3D tempPosition;
-	
 	treatmentTime = 0;
 	
-	// Application Setup Sequence (looking for control point position)
+	// Parse planned channel timing from the RT Plan, not recorded treatment delivery.
 	tempAtt = plan_data->getEntry(0x300A, 0x0230); // Get att closest to (300A,0230)
 	if (tempAtt->tag[0] == 0x300A && tempAtt->tag[1] == 0x0230) {
 		for (int k = 0; k < tempAtt->seq.items.size(); k++) {
@@ -1425,17 +1447,34 @@ int Data::parsePlan(QString* log) {
 						if (!plan_data->parseSequence(&dataStream2, att2)) {
 							return 302;
 						}
+						PlanTiming::Channel channel;
 						
 						// Here, each seed will have its own subsequence with tag (300A,02D0)
 						// Average all the control points 3D positions and get cumulative time
 						// and fill dwell time and position as we go
 						
-						QString tempS = ""; // Get the brachy sequence, it's another nested sequence, so we must go deeper with parseSequence
 						for (int m = 0; m < att2->size(); m++) {
-							if (att2->at(m)->tag[0] == 0x300A && att2->at(m)->tag[1] == 0x02D0) { // Control sequence
+							if (att2->at(m)->tag[0] == 0x300A && att2->at(m)->tag[1] == 0x0286) {
+								QString value;
+								for (unsigned int s = 0; s < att2->at(m)->vl; s++)
+									value.append(att2->at(m)->vf[s]);
+								channel.channelTotalTime = value.trimmed().toDouble(&channel.hasChannelTotalTime);
+							}
+							else if (att2->at(m)->tag[0] == 0x300A && att2->at(m)->tag[1] == 0x02C8) {
+								QString value;
+								for (unsigned int s = 0; s < att2->at(m)->vl; s++)
+									value.append(att2->at(m)->vf[s]);
+								channel.finalCumulativeTimeWeight = value.trimmed().toDouble(&channel.hasFinalCumulativeTimeWeight);
+							}
+							else if (att2->at(m)->tag[0] == 0x300C && att2->at(m)->tag[1] == 0x000E) {
+								QString value;
+								for (unsigned int s = 0; s < att2->at(m)->vl; s++)
+									value.append(att2->at(m)->vf[s]);
+								channel.referencedSourceNumber = value.trimmed().toInt(&channel.hasReferencedSourceNumber);
+							}
+							else if (att2->at(m)->tag[0] == 0x300A && att2->at(m)->tag[1] == 0x02D0) { // Control sequence
 								tempDwellTimes.clear();
 								tempPositions.clear();
-								tempTotalDwellTime = 0;
 					
 								for (int k2 = 0; k2 < att2->at(m)->seq.items.size(); k2++) {
 									tempData3 = QByteArray((char*)att2->at(m)->seq.items[k2]->vf, att2->at(m)->seq.items[k2]->vl);
@@ -1455,11 +1494,14 @@ int Data::parsePlan(QString* log) {
 											}
 
 											pointData2 = tempS.split('\\');
-											
-											for (int p = 0; p < pointData2.size(); p+=3) {
-												tempPositions.append(QVector3D(pointData2[p].toDouble()/10.0,
-																			   pointData2[p+1].toDouble()/10.0,
-																			   pointData2[p+2].toDouble()/10.0));
+											if (pointData2.size() == 3) {
+												bool xOk = false, yOk = false, zOk = false;
+												double x = pointData2[0].toDouble(&xOk);
+												double y = pointData2[1].toDouble(&yOk);
+												double z = pointData2[2].toDouble(&zOk);
+												if (xOk && yOk && zOk)
+													// DICOM coordinates are mm; egs_brachy transformations use cm.
+													tempPositions.append(QVector3D(x/10.0, y/10.0, z/10.0));
 											}
 										}
 										else if (att3->at(n)->tag[0] == 0x300A && att3->at(n)->tag[1] == 0x02D6) { // Seed time weight
@@ -1468,8 +1510,10 @@ int Data::parsePlan(QString* log) {
 												tempT.append(att3->at(n)->vf[s]);
 											}
 
-											tempDwellTimes.append(tempT.toDouble());
-											tempTotalDwellTime += tempT.toDouble();
+											bool timeOk = false;
+											double cumulativeTimeWeight = tempT.trimmed().toDouble(&timeOk);
+											if (timeOk)
+												tempDwellTimes.append(cumulativeTimeWeight);
 										}
 									}
 									for (int n = 0; n < att3->size(); n++) {
@@ -1477,40 +1521,52 @@ int Data::parsePlan(QString* log) {
 									}
 									delete att3;
 								}
+								channel.controlPointPositions = tempPositions;
+								channel.cumulativeTimeWeights = tempDwellTimes;
 							}
 						}
 
+						int timingError = 0;
 						// Convert all the control point data into a seed and a weight
 						if (treatmentTechnique == "PERMANENT") {
-							tempPosition = tempPositions[0]*tempDwellTimes[0];
-							for (int i = 1; i < tempPositions.size(); i++)
-								tempPosition += tempPositions[i]*tempDwellTimes[i];
-							tempPosition /= tempTotalDwellTime;
-
-							seedPos.append(tempPosition);
-							seedTime.append(tempTotalDwellTime);
+							PlanTiming::Result result = PlanTiming::appendPermanentSeed(
+								channel.controlPointPositions, channel.cumulativeTimeWeights,
+								&seedPos, &seedTime
+							);
+							if (result != PlanTiming::Success)
+								timingError = 304;
 						}
 						
 						if (treatmentTechnique != "PERMANENT") { // Measure total time for later calculation
-							tempTotalDwellTime = 0;
-							for (int i = 1; i < tempPositions.size(); i++) {
-								if (tempPositions[i] == tempPositions[i-1] && tempDwellTimes[i] != tempDwellTimes[i-1]) {
-									seedPos.append(tempPositions[i]);
-									seedTime.append(tempDwellTimes[i]-tempDwellTimes[i-1]);
-									tempTotalDwellTime += seedTime.last();
-								}
-							}
-
-							treatmentTime += tempTotalDwellTime;
+							double channelTreatmentTime = 0.0;
+							PlanTiming::Result result = PlanTiming::appendTemporaryChannel(
+								channel, sourceNumbers, &seedPos, &seedTime, &channelTreatmentTime
+							);
+							if (result != PlanTiming::Success)
+								timingError = planTimingErrorCode(result);
+							else
+								treatmentTime += channelTreatmentTime;
 						}
 						
 						for (int n = 0; n < att2->size(); n++) {
 							delete att2->at(n);
 						}
 						delete att2;
+						if (timingError) {
+							for (int n = 0; n < att->size(); n++)
+								delete att->at(n);
+							delete att;
+							seedPos.clear();
+							seedTime.clear();
+							treatmentTime = 0;
+							return timingError;
+						}
 					}
 				}
 			}
+			for (int n = 0; n < att->size(); n++)
+				delete att->at(n);
+			delete att;
 		}
 	}
 	
