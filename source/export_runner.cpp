@@ -146,10 +146,26 @@ static QJsonObject jobResultJson(const ExportJobResult &result) {
 static void copySupportFiles(const QJsonObject &job, ExportJobResult *result) {
 	QString outputDir = jsonString(job, "output_dir");
 	QJsonObject inputs = jsonObject(job, "inputs");
+	QJsonObject exportOptions = jsonObject(job, "export_options");
 	QString egsphantPath = jsonString(inputs, "egsphant_path");
 	QString transformationPath = jsonString(inputs, "transformation_path");
 	QJsonObject rawOutputs = jsonObject(inputs, "raw_outputs");
-	bool copyRawSimulation = jsonObject(job, "export_options").value("copy_raw_simulation_to_patient").toBool(false);
+	QStringList supportedRawExtensions = {".egsinp", ".egslog", ".phantom.3ddose", ".egsdat"};
+	QStringList rawCopyExtensions;
+	QJsonValue configuredRawExtensions = exportOptions.value("copy_raw_simulation_extensions");
+	if (configuredRawExtensions.isArray()) {
+		for (QJsonValue value : configuredRawExtensions.toArray()) {
+			QString extension = value.toString().trimmed();
+			if (!supportedRawExtensions.contains(extension)) {
+				result->warnings.append("Unsupported patient raw-copy extension: " + extension);
+				continue;
+			}
+			if (!rawCopyExtensions.contains(extension))
+				rawCopyExtensions.append(extension);
+		}
+	}
+	else if (exportOptions.value("copy_raw_simulation_to_patient").toBool(false))
+		rawCopyExtensions = supportedRawExtensions;
 
 	copyIfPresent(egsphantPath, outputDir + "/phantom/" + QFileInfo(egsphantPath).fileName(), &result->warnings, &result->outputs);
 	QString phantStem = egsphantStem(egsphantPath);
@@ -160,9 +176,7 @@ static void copySupportFiles(const QJsonObject &job, ExportJobResult *result) {
 	copyIfPresent(transformationPath + ".dwell", outputDir + "/plan/" + QFileInfo(transformationPath).fileName() + ".dwell", &result->warnings, &result->outputs, false);
 	copyIfPresent(transformationPath + ".activity", outputDir + "/plan/" + QFileInfo(transformationPath).fileName() + ".activity", &result->warnings, &result->outputs, false);
 
-	if (!copyRawSimulation)
-		return;
-	for (QString extension : {".egsinp", ".egslog", ".phantom.3ddose", ".egsdat"}) {
+	for (QString extension : rawCopyExtensions) {
 		QString source = nestedPath(rawOutputs, extension);
 		copyIfPresent(source, outputDir + "/simulation/" + QFileInfo(source).fileName(), &result->warnings, &result->outputs);
 	}
