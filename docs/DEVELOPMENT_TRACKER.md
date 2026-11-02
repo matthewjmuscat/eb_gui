@@ -270,8 +270,12 @@ remain separate changes; implementing one does not validate the others.
   prepared from current CLRP `main`; internal test files must remain internal.
 - **CIHR:** Not applicable to the permanent-LDR workflow; no integration planned
   without regression evidence.
-- **HDR/deployment:** Integrated in `hdr-lung/development`; isolated validation
-  executable deployment is pending.
+- **HDR/deployment:** Integrated through `f13fec9` in
+  `hdr-lung/development`. Validation executable
+  `eb_gui_hdr_validation_8ef54b8` was built from cumulative commit
+  `8ef54b807413c2666d85faf8db0baa63a447096d` and deployed only to the isolated
+  validation runtime; its SHA-256 is
+  `13601c09a8746156f9ee7fa882bf83c6ba130a0ea5d78b795a9064f81f070411`.
 - **Validation:** Eight helper-level groups and three parser-path RTPLAN import
   cases passed normally and under AddressSanitizer, leak detection, and
   UndefinedBehaviorSanitizer. Coverage includes independent per-channel
@@ -280,7 +284,9 @@ remain separate changes; implementing one does not validate the others.
   The cumulative parser and timing suite passed and the full Qt application
   built successfully.
 - **Next action:** Validate the approved anonymized HDR plan in the isolated
-  validation runtime before preparing any production-only upstream branch.
+  validation runtime. Retire the temporary development branch after verifying
+  the cumulative branch and fork contain all implementation and test history;
+  prepare a new production-only branch only when an upstream PR is approved.
 
 ### HDR-002: Atomic dwell/activity loading and scaling state
 
