@@ -114,6 +114,9 @@ public:
 						     // time they try
 	//Maximum dwell time
 	double maxDwellTime=0;
+	QString dwellFilePath;
+	QString dwellFileType;
+	QString dwellValues;
 	// Phantom list	
 	QLabel*      phantomLabel;
 	QCheckBox*   phantomOnlyLocal;
@@ -221,6 +224,11 @@ public slots:
     void transformationRefresh(); // Reset all on screen values properly
     void transformationLoadDwells(); // Manually change activity/dwell file
     void transformationLoadDwellsAuto(int i); // Automatically change activity/dwell file
+	void clearDwellState();
+	bool loadDwellState(QString dwellPath, QString transformationPath, QString *error);
+	bool applyDwellStateToInput(QString *error);
+	double dwellTimeScaleHours() const;
+	QString selectedTransformationPath() const;
 
 // PROGRESS BAR~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 public:

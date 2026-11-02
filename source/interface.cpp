@@ -711,7 +711,9 @@ void Interface::transformationRefresh() {
 		transformationDwellButton->setDisabled(false);
 		
 		connect(transformationListView, SIGNAL(currentRowChanged(int)),
-				this, SLOT(transformationLoadDwellsAuto(int)));
+				this, SLOT(transformationLoadDwellsAuto(int)), Qt::UniqueConnection);
+		if (transformationListView->currentRow() >= 0)
+			transformationLoadDwellsAuto(transformationListView->currentRow());
 	}
 	else {
 		transformationDwellLabel->setDisabled(true);
@@ -719,128 +721,138 @@ void Interface::transformationRefresh() {
 		
 		disconnect(transformationListView, SIGNAL(currentRowChanged(int)),
 				   this, SLOT(transformationLoadDwellsAuto(int)));
+		clearDwellState();
 	}
 }
 
 // Transformation functions
+void Interface::clearDwellState() {
+	dwellFilePath.clear();
+	dwellFileType.clear();
+	dwellValues.clear();
+	maxDwellTime = 0;
+	transformationDwellEdit->setText("none selected");
+	transformationDwellEdit->setToolTip("none selected");
+}
+
+QString Interface::selectedTransformationPath() const {
+	int i = transformationListView->currentRow();
+	if (i < 0)
+		return "";
+	if (i < data->localDirTransforms.size())
+		return data->localDirTransforms[i]+data->localNameTransforms[i];
+	i -= data->localDirTransforms.size();
+	if (i < 0 || i >= data->libDirTransforms.size())
+		return "";
+	return data->libDirTransforms[i]+data->libNameTransforms[i];
+}
+
+bool Interface::loadDwellState(QString dwellPath, QString transformationPath, QString *error) {
+	clearDwellState();
+	if (!dwellPath.endsWith(".dwell") && !dwellPath.endsWith(".activity")) {
+		*error = tr("Selected file is not a .dwell or .activity file.");
+		return false;
+	}
+
+	QFile dwellFile(dwellPath);
+	if (!dwellFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+		*error = tr("Could not open dwell/activity file.");
+		return false;
+	}
+	QStringList values = QString::fromUtf8(dwellFile.readAll())
+		.split(QRegExp("\\s+"), QString::SkipEmptyParts);
+	dwellFile.close();
+	if (values.isEmpty()) {
+		*error = tr("Dwell/activity file contains no values.");
+		return false;
+	}
+
+	double maximum = 0;
+	for (const QString &value : values) {
+		bool ok = false;
+		double number = value.toDouble(&ok);
+		if (!ok || !qIsFinite(number) || number < 0) {
+			*error = tr("Dwell/activity values must be finite and nonnegative.");
+			return false;
+		}
+		maximum = qMax(maximum, number);
+	}
+	if (maximum <= 0) {
+		*error = tr("Dwell/activity file must contain at least one positive value.");
+		return false;
+	}
+
+	QFile transformationFile(transformationPath);
+	if (!transformationFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+		*error = tr("Could not open selected transformation file.");
+		return false;
+	}
+	int transformations = 0;
+	while (!transformationFile.atEnd())
+		if (transformationFile.readLine().contains("start transformation"))
+			transformations++;
+	transformationFile.close();
+	if (transformations <= 0 || transformations != values.size()) {
+		*error = tr("Dwell/activity count %1 does not match transformation count %2.")
+			.arg(values.size()).arg(transformations);
+		return false;
+	}
+
+	dwellFilePath = QFileInfo(dwellPath).absoluteFilePath();
+	dwellFileType = dwellPath.endsWith(".dwell") ? "dwell" : "activity";
+	dwellValues = values.join(" ");
+	maxDwellTime = maximum;
+	transformationDwellEdit->setText(dwellFilePath);
+	transformationDwellEdit->setToolTip(dwellFilePath);
+	return true;
+}
+
+bool Interface::applyDwellStateToInput(QString *error) {
+	if (!transformationDwell->isChecked()) {
+		egsinp->sourceDwells.clear();
+		if (!sourcePermTime->isChecked()) {
+			*error = tr("Temporary treatment requires a valid dwell/activity file.");
+			return false;
+		}
+		return true;
+	}
+	if (!loadDwellState(dwellFilePath, selectedTransformationPath(), error)) {
+		egsinp->sourceDwells.clear();
+		return false;
+	}
+	egsinp->sourceDwells = dwellValues;
+	return true;
+}
+
+double Interface::dwellTimeScaleHours() const {
+	return maxDwellTime/3600.0;
+}
+
 void Interface::transformationLoadDwells() {
 	QString path = QFileDialog::getOpenFileName(this, tr("Load activity/dwell file"), data->gui_location+"/database/transformation/", tr("Activity File (*.dwell *.activity)"));
-	
-	// Check if it works
-	QFile file(path);
-	if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-		QMessageBox::warning(0, "file error",
-        tr("Could not open selected file."));
-        return;
-	}
-	
-	// Count the number of doubles
-	QTextStream in(&file);
-	in.skipWhiteSpace();
-	
-	int dwells = 0;
-	double temp;
-	maxDwellTime=0;
-	while (!in.atEnd()) {
-        in >> temp;
-		if (temp>maxDwellTime){
-			maxDwellTime=temp;
-		}
-		dwells++;
-    }
-	file.close();
-	
-	// Compare to selected transformation file count
-	int i = transformationListView->currentRow();
-	QString path2 = i < data->localDirTransforms.size()?
-					data->localDirTransforms[i]:data->libDirTransforms[i-data->localDirTransforms.size()]; // GUI parameter
-	path2 = path2 + (i < data->localDirTransforms.size()?
-			data->localNameTransforms[i]:data->libNameTransforms[i-data->localNameTransforms.size()]); // GUI parameter
-	
-	QFile file2(path2);
-	if (!file2.open(QIODevice::ReadOnly | QIODevice::Text)) {
-		QMessageBox::warning(0, "file error",
-        tr("Could not open transformation file."));
-        return;
-	}
-	
-	int seeds = 0;
-	
-	while (!file2.atEnd())
-        if (file2.readLine().contains("start transformation"))
-			seeds++;
-	file2.close();
-	
-	if (seeds != dwells) {
-		QMessageBox::warning(0, "seed count error",
-        tr("Chosen activity/dwell file count %1 does not match transformation file %2, aborting.").arg(dwells).arg(seeds));
-        return;
-	}
-	
-	transformationDwellEdit->setText(path);
-	transformationDwellEdit->setToolTip(path);
+	if (path.isEmpty())
+		return;
+	QString error;
+	if (!loadDwellState(path, selectedTransformationPath(), &error))
+		QMessageBox::warning(0, "dwell/activity file error", error);
 }
 
 void Interface::transformationLoadDwellsAuto(int i) {
-	// Compare to selected transformation file count
-	QString path2 = i < data->localDirTransforms.size()?
-					data->localDirTransforms[i]:data->libDirTransforms[i-data->localDirTransforms.size()]; // GUI parameter
-	path2 = path2 + (i < data->localDirTransforms.size()?
-			data->localNameTransforms[i]:data->libNameTransforms[i-data->localNameTransforms.size()]); // GUI parameter
-	
-	QFile file2(path2);
-	if (!file2.open(QIODevice::ReadOnly | QIODevice::Text)) {
-		QMessageBox::warning(0, "file error",
-        tr("Could not open transformation file."));
-        return;
-	}
-	
-	int seeds = 0;
-	
-	while (!file2.atEnd())
-        if (file2.readLine().contains("start transformation"))
-			seeds++;
-	file2.close();
-		
-	// Check if it works
-	QFile file(path2+".dwell"), file3(path2+".activity"), *final_file;
-	if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {	
-		if (!file3.open(QIODevice::ReadOnly | QIODevice::Text)) {
-			QMessageBox::warning(0, "no dwell or activity file found",
+	clearDwellState();
+	QString transformationPath = selectedTransformationPath();
+	if (i < 0 || transformationPath.isEmpty())
+		return;
+	QString dwellPath = transformationPath+".dwell";
+	QString activityPath = transformationPath+".activity";
+	QString selectedPath = QFileInfo::exists(dwellPath) ? dwellPath : activityPath;
+	if (!QFileInfo::exists(selectedPath)) {
+		QMessageBox::warning(0, "no dwell or activity file found",
 			tr("Please load one manually if one is desired."));
-			
-			transformationDwellEdit->setText("none selected");
-			transformationDwellEdit->setToolTip("none selected");
-			
-			return;
-		}
-		else {
-			final_file = &file3;
-		}
+		return;
 	}
-	else {
-		final_file = &file;
-	}
-	
-	// Count the number of doubles
-	QTextStream in(final_file);
-	in.skipWhiteSpace();
-	
-	int dwells = 0;
-	double temp;
-	
-	while (!file.atEnd()) {
-        in >> temp;
-		in.skipWhiteSpace();
-		dwells++;
-    }
-	final_file->close();
-	
-	if (seeds != dwells) {
-		QMessageBox::warning(0, "seed count error",
-        tr("Chosen activity/dwell file seed count does not match transformation file, aborting."));
-        return;
-	}
+	QString error;
+	if (!loadDwellState(selectedPath, transformationPath, &error))
+		QMessageBox::warning(0, "dwell/activity file error", error);
 }
 
 // Other functions
@@ -1055,22 +1067,11 @@ int Interface::populateEgsinp() {
 	s = data->libDirSources[i];
 	egsinp->sourceShapeFile = s+"boundary.shape";  // GUI parameter
 	
-	if (transformationDwell->isChecked()) {
-		QString fileName = transformationDwellEdit->text();	// GUI parameter
-		QFile actFile (fileName);
-		if (actFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-			QTextStream in (&actFile);
-			egsinp->sourceDwells = in.readLine(); // GUI parameter
-		}
-		else {
-			QMessageBox::warning(0, "dwell/activity file error",
-			tr("Failed to open dwell/activity file for source, distributing activity evenly."));
-			egsinp->sourceDwells = "";
-		}
-		actFile.close();
-	}
-	else {
-		egsinp->sourceDwells = "";
+	QString dwellError;
+	if (!applyDwellStateToInput(&dwellError)) {
+		QMessageBox::warning(0, "dwell/activity file error",
+			dwellError+tr(" Aborting input generation."));
+		return 104;
 	}
 	
 	// scoring options
@@ -1118,7 +1119,7 @@ int Interface::populateEgsinp() {
 
 			double tau = (half_life/0.6931471805)*24.0; // go from half-life in days to mean lifetime in hours
 			if (!sourcePermTime->isChecked())
-				tempScale *= maxDwellTime/3600; //HDR scaling factor
+				tempScale *= dwellTimeScaleHours(); //HDR scaling factor
 			else if (sourcePermTime->isChecked())
 				tempScale *= tau; //LDR scaling factor
 			
