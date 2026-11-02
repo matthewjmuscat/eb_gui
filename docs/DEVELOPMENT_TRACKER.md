@@ -284,10 +284,24 @@ remain separate changes; implementing one does not validate the others.
   normalization, stationary-position tolerance, inactive zero-duration pairs,
   malformed timing rollback, and permanent-LDR weighted-position compatibility.
   The cumulative parser and timing suite passed and the full Qt application
-  built successfully.
-- **Next action:** Validate the approved anonymized HDR plan in the isolated
-  validation runtime. Prepare a new production-only branch only when an
-  upstream PR is approved.
+  built successfully. Local import of an approved anonymized HDR RTPLAN in the
+  isolated validation runtime matched independently established dwell count,
+  spatial positions, individual dwell times, and total planned duration. No
+  simulation or absolute-dose validation was performed.
+- **Upstream PR summary:**
+  - **Problem:** RTPLAN cumulative time-weight differences were used directly as
+    seconds, producing incorrect HDR dwell durations when channel weights were
+    normalized to an arbitrary final value.
+  - **Correction:** Convert each stationary dwell interval independently to
+    physical seconds using its channel total time and final cumulative weight;
+    validate malformed timing and unsupported transit intervals while
+    preserving permanent-LDR positioning.
+  - **Validation:** Synthetic single- and multi-channel timing, malformed-input
+    rollback, permanent-LDR compatibility, parser integration, sanitizers, and
+    an approved local anonymized-plan import all passed. Dose simulation,
+    source calibration, and absolute-Gy interpretation remain unvalidated.
+- **Next action:** Prepare a new production-only branch only when an upstream PR
+  is approved.
 
 ### HDR-002: Atomic dwell/activity loading and scaling state
 
@@ -382,6 +396,19 @@ remain separate changes; implementing one does not validate the others.
   uses plan modification timestamps.
 - **Next action:** Correct semantics independently of calibration work.
 
+### HDR-009: RTPLAN import duration-log formatting
+
+- **Type:** Bug fix.
+- **Problem:** The RTPLAN import log appends numeric `treatmentTime` directly to
+  a `QString`, so the total duration can be omitted or displayed incorrectly.
+- **Branch/commit:** Not assigned; not implemented.
+- **Fork/upstream:** Not pushed; upstream status under consideration.
+- **CIHR/HDR/deployment:** Not integrated or deployed.
+- **Validation required:** Explicit numeric formatting, planned-duration
+  labeling, units, and a regression check for temporary and permanent plans.
+- **Next action:** Correct independently after HDR-002; do not combine with
+  timestamp semantics or scaling changes.
+
 ## Deferred validation and engineering
 
 ### VAL-001: Flexisource model and calibration qualification
@@ -390,7 +417,9 @@ remain separate changes; implementing one does not validate the others.
 - **Status:** Required; not complete.
 - **Purpose:** Establish the clinical source model, geometry, spectrum, and
   source-model-specific air-kerma strength per primary history before absolute
-  HDR scaling.
+  HDR scaling. Establish the source-strength reference time and an approved
+  decay-to-treatment-time policy using authoritative treatment timing; RT Plan
+  modification timestamps are not treatment delivery time.
 - **Integration/deployment:** No source selection or HDR binary is approved by
   this record.
 - **Next action:** Obtain authoritative model evidence and compare against an
@@ -434,3 +463,11 @@ Every feature task must close by updating the relevant entry with exact commits
 and one or more of: implemented, independently tested, integrated, deployed, or
 merged upstream. Upstream-facing branches must not contain this governance file;
 record their status on `hdr-lung/development` in a separate documentation commit.
+
+For every general-purpose correction, preserve a concise **Upstream PR summary**
+inside its existing tracker entry with three fields: **Problem**, **Correction**,
+and **Validation**. State observed outcomes and material limitations without
+patient-derived details, private paths, or internal development narration. Keep
+production commits, internal test commits, integration/deployment state, and
+upstream submission state recorded separately. Do not create separate PR-draft
+files or tracking systems.
