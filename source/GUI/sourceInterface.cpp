@@ -421,14 +421,11 @@ void sourceInterface::parsePlan() {
         tr("Cumulative Time Weight values are nonmonotonic. DICOM parsing aborted."));
 	else if (err == 308)
 		QMessageBox::warning(0, "DICOM error",
-        tr("A zero-duration dwell interval was found. DICOM parsing aborted."));
+        tr("No active dwell interval was found. DICOM parsing aborted."));
 	else if (err == 309)
 		QMessageBox::warning(0, "DICOM error",
-        tr("The plan uses a missing or unsupported source reference. DICOM parsing aborted."));
-	else if (err == 310)
-		QMessageBox::warning(0, "DICOM error",
         tr("Final Cumulative Time Weight does not match the control points. DICOM parsing aborted."));
-	else if (err == 311)
+	else if (err == 310)
 		QMessageBox::warning(0, "DICOM error",
         tr("A nonzero source-transit interval is not supported. DICOM parsing aborted."));
 	else if (err == 401)

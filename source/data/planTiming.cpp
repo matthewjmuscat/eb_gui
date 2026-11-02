@@ -10,13 +10,17 @@ bool nearlyEqual(double left, double right) {
     return std::abs(left-right) <= 1.0e-9*scale;
 }
 
+bool sameDwellPosition(const QVector3D &left, const QVector3D &right) {
+    const float positionToleranceCm = 1.0e-5f;
+    return (left-right).lengthSquared() <= positionToleranceCm*positionToleranceCm;
+}
+
 }
 
 namespace PlanTiming {
 
 Result appendTemporaryChannel(
     const Channel &channel,
-    const QSet<int> &sourceNumbers,
     QVector<QVector3D> *seedPositions,
     QVector<double> *seedTimes,
     double *channelTreatmentTimeSeconds
@@ -35,11 +39,6 @@ Result appendTemporaryChannel(
         channel.finalCumulativeTimeWeight <= 0.0) {
         return InvalidFinalCumulativeTimeWeight;
     }
-    if (sourceNumbers.size() != 1 || !channel.hasReferencedSourceNumber ||
-        !sourceNumbers.contains(channel.referencedSourceNumber)) {
-        return UnsupportedSourceReference;
-    }
-
     const QVector<double> &weights = channel.cumulativeTimeWeights;
     if (!std::isfinite(weights.first()) || !nearlyEqual(weights.first(), 0.0)) {
         return InvalidControlPointData;
@@ -59,7 +58,9 @@ Result appendTemporaryChannel(
     double pendingTreatmentTime = 0.0;
     for (int i = 1; i < channel.controlPointPositions.size(); i++) {
         double deltaWeight = weights[i]-weights[i-1];
-        bool samePosition = channel.controlPointPositions[i] == channel.controlPointPositions[i-1];
+        bool samePosition = sameDwellPosition(
+            channel.controlPointPositions[i], channel.controlPointPositions[i-1]
+        );
         if (!samePosition) {
             if (!nearlyEqual(deltaWeight, 0.0)) {
                 return UnsupportedTransitTime;
@@ -67,7 +68,7 @@ Result appendTemporaryChannel(
             continue;
         }
         if (nearlyEqual(deltaWeight, 0.0)) {
-            return ZeroDurationDwell;
+            continue;
         }
 
         double dwellSeconds = channel.channelTotalTime*deltaWeight/
@@ -77,7 +78,10 @@ Result appendTemporaryChannel(
         pendingTreatmentTime += dwellSeconds;
     }
 
-    if (pendingTimes.isEmpty() || !nearlyEqual(pendingTreatmentTime, channel.channelTotalTime)) {
+    if (pendingTimes.isEmpty()) {
+        return NoActiveDwell;
+    }
+    if (!nearlyEqual(pendingTreatmentTime, channel.channelTotalTime)) {
         return FinalCumulativeTimeWeightMismatch;
     }
 

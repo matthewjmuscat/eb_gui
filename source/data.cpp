@@ -58,16 +58,23 @@ bool exists(QString path){
     return stat(str.c_str(), &info) == 0;
 }
 
+void deleteAttributes(QVector<Attribute *> *attributes) {
+	if (!attributes)
+		return;
+	for (int i = 0; i < attributes->size(); i++)
+		delete attributes->at(i);
+	delete attributes;
+}
+
 int planTimingErrorCode(PlanTiming::Result result) {
 	switch (result) {
 		case PlanTiming::InvalidControlPointData: return 304;
 		case PlanTiming::InvalidChannelTotalTime: return 305;
 		case PlanTiming::InvalidFinalCumulativeTimeWeight: return 306;
 		case PlanTiming::NonmonotonicCumulativeTimeWeight: return 307;
-		case PlanTiming::ZeroDurationDwell: return 308;
-		case PlanTiming::UnsupportedSourceReference: return 309;
-		case PlanTiming::FinalCumulativeTimeWeightMismatch: return 310;
-		case PlanTiming::UnsupportedTransitTime: return 311;
+		case PlanTiming::NoActiveDwell: return 308;
+		case PlanTiming::FinalCumulativeTimeWeightMismatch: return 309;
+		case PlanTiming::UnsupportedTransitTime: return 310;
 		case PlanTiming::Success: return 0;
 	}
 	return 304;
@@ -1209,7 +1216,6 @@ int Data::parsePlan(QString* log) {
 	QStringList pointData2;
 	QString treatDate = "", kermaDate = "";
 	QString treatTime = "", kermaTime = "";
-	QSet<int> sourceNumbers;
 	
 	// Reset plan data variables to default to know what worked
 	treatmentType = "UNKNOWN";
@@ -1288,10 +1294,10 @@ int Data::parsePlan(QString* log) {
 
 			att = new QVector <Attribute *>;
 			if (!plan_data->parseSequence(&dataStream, att)) {
+				deleteAttributes(att);
 				return 103;
 			}
 
-			QString tempN   = ""; // Get the source number
 			QString tempS   = ""; // Get the air kerma
 			QString tempI   = ""; // Get the half life
 			QString tempE   = ""; // Get the isotope name
@@ -1299,10 +1305,7 @@ int Data::parsePlan(QString* log) {
 			QString tempD   = ""; // Get date data
 			QString tempT   = ""; // Get time data
 			for (int l = 0; l < att->size(); l++) {
-				if (att->at(l)->tag[0] == 0x300A && att->at(l)->tag[1] == 0x0212)
-					for (unsigned int s = 0; s < att->at(l)->vl; s++)
-						tempN.append(att->at(l)->vf[s]);
-				else if (att->at(l)->tag[0] == 0x300A && att->at(l)->tag[1] == 0x022A)
+				if (att->at(l)->tag[0] == 0x300A && att->at(l)->tag[1] == 0x022A)
 					for (unsigned int s = 0; s < att->at(l)->vl; s++)
 						tempS.append(att->at(l)->vf[s]);
 				else if (att->at(l)->tag[0] == 0x300A && att->at(l)->tag[1] == 0x0228)
@@ -1338,10 +1341,6 @@ int Data::parsePlan(QString* log) {
 						tempT.append(att->at(l)->vf[s]);
 			}
 
-			bool sourceNumberOk = false;
-			int sourceNumber = tempN.trimmed().toInt(&sourceNumberOk);
-			if (sourceNumberOk)
-				sourceNumbers.insert(sourceNumber);
 			if (airKerma == -1 && tempS != "")
 				airKerma = tempS.toDouble();
 			if (halfLife == -1 && tempI != "")
@@ -1355,10 +1354,7 @@ int Data::parsePlan(QString* log) {
 			if (kermaTime == "" && tempT != "")
 				kermaTime = tempT.trimmed();
 
-			for (int l = 0; l < att->size(); l++) {
-				delete att->at(l);
-			}
-			delete att;
+			deleteAttributes(att);
 		}
 	}
 	
@@ -1423,6 +1419,12 @@ int Data::parsePlan(QString* log) {
 	QVector<double> tempDwellTimes;
 	QVector<QVector3D> tempPositions;
 	treatmentTime = 0;
+	auto planImportError = [this](int error) {
+		seedPos.clear();
+		seedTime.clear();
+		treatmentTime = 0;
+		return error;
+	};
 	
 	// Parse planned channel timing from the RT Plan, not recorded treatment delivery.
 	tempAtt = plan_data->getEntry(0x300A, 0x0230); // Get att closest to (300A,0230)
@@ -1433,7 +1435,8 @@ int Data::parsePlan(QString* log) {
 
 			att = new QVector <Attribute *>;
 			if (!plan_data->parseSequence(&dataStream, att)) {
-				return 301;
+				deleteAttributes(att);
+				return planImportError(301);
 			}
 
 			QString tempS = ""; // Get the channel, it's another nested sequence, so we must go deeper with parseSequence
@@ -1445,7 +1448,9 @@ int Data::parsePlan(QString* log) {
 
 						att2 = new QVector <Attribute *>;
 						if (!plan_data->parseSequence(&dataStream2, att2)) {
-							return 302;
+							deleteAttributes(att2);
+							deleteAttributes(att);
+							return planImportError(302);
 						}
 						PlanTiming::Channel channel;
 						
@@ -1466,12 +1471,6 @@ int Data::parsePlan(QString* log) {
 									value.append(att2->at(m)->vf[s]);
 								channel.finalCumulativeTimeWeight = value.trimmed().toDouble(&channel.hasFinalCumulativeTimeWeight);
 							}
-							else if (att2->at(m)->tag[0] == 0x300C && att2->at(m)->tag[1] == 0x000E) {
-								QString value;
-								for (unsigned int s = 0; s < att2->at(m)->vl; s++)
-									value.append(att2->at(m)->vf[s]);
-								channel.referencedSourceNumber = value.trimmed().toInt(&channel.hasReferencedSourceNumber);
-							}
 							else if (att2->at(m)->tag[0] == 0x300A && att2->at(m)->tag[1] == 0x02D0) { // Control sequence
 								tempDwellTimes.clear();
 								tempPositions.clear();
@@ -1482,7 +1481,10 @@ int Data::parsePlan(QString* log) {
 
 									att3 = new QVector <Attribute *>;
 									if (!plan_data->parseSequence(&dataStream3, att3)) {
-										return 303;
+										deleteAttributes(att3);
+										deleteAttributes(att2);
+										deleteAttributes(att);
+										return planImportError(303);
 									}
 
 									QString tempS = "";
@@ -1516,10 +1518,7 @@ int Data::parsePlan(QString* log) {
 												tempDwellTimes.append(cumulativeTimeWeight);
 										}
 									}
-									for (int n = 0; n < att3->size(); n++) {
-										delete att3->at(n);
-									}
-									delete att3;
+									deleteAttributes(att3);
 								}
 								channel.controlPointPositions = tempPositions;
 								channel.cumulativeTimeWeights = tempDwellTimes;
@@ -1540,7 +1539,7 @@ int Data::parsePlan(QString* log) {
 						if (treatmentTechnique != "PERMANENT") { // Measure total time for later calculation
 							double channelTreatmentTime = 0.0;
 							PlanTiming::Result result = PlanTiming::appendTemporaryChannel(
-								channel, sourceNumbers, &seedPos, &seedTime, &channelTreatmentTime
+								channel, &seedPos, &seedTime, &channelTreatmentTime
 							);
 							if (result != PlanTiming::Success)
 								timingError = planTimingErrorCode(result);
@@ -1548,25 +1547,15 @@ int Data::parsePlan(QString* log) {
 								treatmentTime += channelTreatmentTime;
 						}
 						
-						for (int n = 0; n < att2->size(); n++) {
-							delete att2->at(n);
-						}
-						delete att2;
+						deleteAttributes(att2);
 						if (timingError) {
-							for (int n = 0; n < att->size(); n++)
-								delete att->at(n);
-							delete att;
-							seedPos.clear();
-							seedTime.clear();
-							treatmentTime = 0;
-							return timingError;
+							deleteAttributes(att);
+							return planImportError(timingError);
 						}
 					}
 				}
 			}
-			for (int n = 0; n < att->size(); n++)
-				delete att->at(n);
-			delete att;
+			deleteAttributes(att);
 		}
 	}
 	
