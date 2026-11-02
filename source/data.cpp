@@ -1425,7 +1425,7 @@ int Data::parsePlan(QString* log) {
 		treatmentTime = 0;
 		return error;
 	};
-	
+
 	// Parse planned channel timing from the RT Plan, not recorded treatment delivery.
 	tempAtt = plan_data->getEntry(0x300A, 0x0230); // Get att closest to (300A,0230)
 	if (tempAtt->tag[0] == 0x300A && tempAtt->tag[1] == 0x0230) {
