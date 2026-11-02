@@ -149,6 +149,10 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 
+	delete interface.egsinp;
+	interface.egsinp = nullptr;
+	delete interface.data;
+	interface.data = nullptr;
 	std::cout << "Passed HDR dwell application-state test\n";
 	return 0;
 }
