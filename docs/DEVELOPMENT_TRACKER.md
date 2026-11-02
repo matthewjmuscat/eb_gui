@@ -266,8 +266,10 @@ remain separate changes; implementing one does not validate the others.
 - **Internal tests:** Helper and synthetic RTPLAN import coverage at `5104481`
   and `f13fec9`; whitespace-only cleanup at `a0a93ad`.
 - **Fork/upstream:** Integrated on the fork's HDR development branch. No
-  upstream PR has been submitted. A future production-only branch should be
-  prepared from current CLRP `main`; internal test files must remain internal.
+  upstream PR has been submitted. The temporary implementation branch was
+  retired locally and from the fork after its patches and tests were verified on
+  the cumulative branch. A future production-only branch should be prepared
+  from current CLRP `main`; internal test files must remain internal.
 - **CIHR:** Not applicable to the permanent-LDR workflow; no integration planned
   without regression evidence.
 - **HDR/deployment:** Integrated through `f13fec9` in
@@ -284,9 +286,8 @@ remain separate changes; implementing one does not validate the others.
   The cumulative parser and timing suite passed and the full Qt application
   built successfully.
 - **Next action:** Validate the approved anonymized HDR plan in the isolated
-  validation runtime. Retire the temporary development branch after verifying
-  the cumulative branch and fork contain all implementation and test history;
-  prepare a new production-only branch only when an upstream PR is approved.
+  validation runtime. Prepare a new production-only branch only when an
+  upstream PR is approved.
 
 ### HDR-002: Atomic dwell/activity loading and scaling state
 
