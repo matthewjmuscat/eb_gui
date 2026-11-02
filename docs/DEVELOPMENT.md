@@ -11,6 +11,12 @@ development streams:
 The two project streams share reviewed general-purpose fixes selectively. They
 do not automatically inherit one another's project-specific functionality.
 
+Maintain one persistent source checkout per stream: `eb_gui_hdr_dev` for HDR
+and the protected `eb_gui_dev` checkout for CIHR. Source checkouts are not build
+directories or runtime databases. Do not create per-feature clones, directories,
+or worktrees without explicit approval. An approved temporary worktree is an
+exception and must be removed when its purpose is complete.
+
 `DEVELOPMENT_TRACKER.md` is the authoritative public-safe record of what has
 been implemented, tested, integrated, deployed, proposed upstream, or merged.
 Consult it before starting work and update it whenever one of those states
@@ -20,10 +26,11 @@ changes.
 
 ### General-purpose fixes
 
-Corrections that apply to eb_gui independently of a research project should
-normally start on a clean `fix/...` branch based on current upstream `main`.
-Keep the production change narrow, add synthetic regression coverage, and
-validate the fix independently before integrating it into a project stream.
+Develop, test, and integrate reviewed corrections on the applicable cumulative
+project branch. Keep the implementation and commit boundaries narrow enough for
+a general-purpose correction to be selectively extracted later. Everyday
+development does not require an upstream-based branch or another filesystem
+workspace.
 
 ### CIHR development
 
@@ -39,27 +46,34 @@ change is deliberately implemented as a general-purpose correction.
 
 ## Branch and review workflow
 
-For an independent fix:
+The normal HDR workflow is cumulative:
 
-1. Update remote metadata and identify the exact upstream `main` commit.
-2. Create one focused `fix/...` branch from that commit.
-3. Demonstrate the defect with a synthetic fixture or focused test.
-4. Implement the smallest technically correct change.
-5. Run the focused test, relevant build, and sanitizer checks where applicable.
-6. Review the production diff, test diff, and commit range for unrelated or
-   sensitive files.
-7. Commit and push the feature branch to the fork after approval.
-8. Open an upstream PR from the fork branch to CLRP `main` only after explicit
-   approval.
-9. Integrate the reviewed commit into each project stream that needs it.
+1. Work in the canonical `eb_gui_hdr_dev` checkout on
+   `hdr-lung/development`.
+2. Demonstrate the defect with a focused synthetic test or reproducible check.
+3. Implement the smallest technically correct change.
+4. Run focused tests, relevant regression tests, sanitizers, and a clean build.
+5. Integrate the reviewed correction into the cumulative branch and update the
+   development tracker.
+6. Build and deploy only to an explicitly approved isolated runtime.
 
-An internal PR targeting the fork is optional. It is not a prerequisite for an
-upstream PR. A dependent fix must document its dependency instead of silently
-including unrelated commits.
+Prefer three logically distinct commits for each correction:
 
-Fork governance files, private operations, and project-only changes must not be
-included in upstream PR commit ranges. Use selective integration rather than
-merging an entire project development stream upstream.
+- **Production:** the surgical correction only, independently compilable against
+  its intended upstream base wherever feasible.
+- **Internal validation:** synthetic/regression tests and test infrastructure.
+- **Governance:** tracker and development-policy updates.
+
+If a correction depends on another unmerged change, document and validate that
+dependency explicitly. Existing published history does not need rewriting to
+retrofit this structure.
+
+When an upstream contribution is actually ready, update remote metadata, create
+a temporary branch from current CLRP `main`, and selectively cherry-pick or
+adapt only the relevant production commit or commits. Verify the resulting
+production-only diff and dependencies before opening a PR. Delete the temporary
+branch after its PR purpose is complete. The fork's `main` should remain aligned
+with CLRP `main` wherever practical.
 
 ## Runtime isolation
 
@@ -117,8 +131,10 @@ integrated for HDR development. Their intended upstream organization is:
    VR nested sequence recognition, defined-length delimiter accounting, and the
    final combined test expectations.
 
-Strengthen synthetic coverage before proposing these PRs. Do not combine them
-with HDR calculation changes or broad parser modernization.
+Strengthen synthetic coverage internally before proposing these PRs. Upstream
+PRs should contain only the necessary production changes, not new internal test
+files or test-project infrastructure. Do not combine parser changes with HDR
+calculation changes or broad parser modernization.
 
 ## Responsible agent use
 
@@ -138,6 +154,17 @@ Close each feature task with a separate tracker update on
 independent testing, research-branch integration, binary deployment, and
 upstream merge status. Do not place governance or tracker commits in an
 upstream-facing fix branch.
+
+The tracker covers both CIHR and HDR development; it is not permanently
+HDR-specific. The intended long-term home is a shared internal governance
+branch separate from either research stream. Until that migration is approved,
+maintain the canonical copy here and do not duplicate divergent trackers.
+
+Upstream PRs must be surgical: include only technically necessary production
+code, preserve existing upstream tests, and exclude new internal regression
+files, fixtures, harnesses, test project configurations, research-specific
+features, governance, and development history. Keep detailed validation
+evidence internally and keep PR descriptions concise.
 
 Filesystem cleanup, Git history changes, deployments, and upstream PR creation
 are explicit approval gates.

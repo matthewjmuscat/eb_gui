@@ -34,12 +34,21 @@ the explicitly approved isolated runtime.
 
 - Keep `cihr/all-fixes` and `hdr-lung/development` independent. Neither stream
   automatically inherits the other's project-specific changes.
-- Base independent general-purpose fixes on current CLRP upstream `main` where
-  feasible. Base project work on its corresponding development stream.
+- Maintain one persistent source checkout per research stream. `eb_gui_hdr_dev`
+  is the canonical HDR checkout and `eb_gui_dev` is the protected CIHR checkout.
+- Develop and integrate reviewed HDR work cumulatively on
+  `hdr-lung/development`. Keep commits clean enough for later selective upstream
+  extraction.
+- Do not create per-feature source directories, clones, or Git worktrees without
+  explicit approval. Temporary worktrees are exceptional and must be removed
+  when their approved purpose is complete.
 - Prefer the smallest correct change. Avoid unrelated modernization or
   refactoring.
 - Add focused synthetic regression tests. Run the narrow test first, then
   relevant builds, sanitizers, and integration checks.
+- Prefer separate commits for production code, internal tests/test
+  infrastructure, and development documentation. Record dependencies on
+  unmerged corrections explicitly.
 - Treat generated code as unvalidated until it has been reviewed and tested.
 - Record source commit, executable SHA-256, runtime, and validation status for
   every deployed build.
@@ -49,10 +58,16 @@ the explicitly approved isolated runtime.
 
 ## Upstream contributions
 
-Push clean feature branches to the existing fork. Upstream PRs are opened from
-those fork branches into CLRP `main` after approval. Keep project-specific
-changes, private operational material, and fork governance commits out of the
-upstream PR commit range.
+Create an upstream-facing branch only when preparing an actual contribution.
+Start it from current CLRP `main` where feasible and selectively cherry-pick or
+adapt only the necessary production correction. Do not include internal tests,
+synthetic fixtures, test harnesses, test project files, research-specific
+features, governance, or tracker changes. Do not remove existing upstream tests.
+
+Keep each PR coherent and technically justified; do not impose arbitrary line
+limits. Describe the defect, correction, and verified observations concisely.
+Delete temporary contribution branches after their purpose is complete, and
+keep the fork's `main` aligned with CLRP `main` wherever practical.
 
 Before any push, review tracked and staged content, including previously
 tracked files that `.gitignore` cannot protect.

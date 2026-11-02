@@ -7,6 +7,10 @@ This is the authoritative public-safe record of meaningful development in the
 and what remains before research or upstream use. Git history remains the
 authority for source content; this tracker records intent and lifecycle state.
 
+This tracker covers both CIHR and HDR development. Its intended long-term home
+is a shared internal governance branch rather than either research stream; that
+migration remains deferred pending an explicit repository-governance decision.
+
 ## Status model
 
 These states are distinct and must not be collapsed:
@@ -257,21 +261,26 @@ remain separate changes; implementing one does not validate the others.
 - **Problem:** Non-permanent plans currently treat cumulative time-weight
   differences as seconds. Each channel instead requires
   `ChannelTotalTime * delta_weight / final_weight`.
-- **Branch/commit:** Implemented on `fix/hdr-rtplan-channel-timing` at
-  `a6615521e568799b51168131979acca8418d6499` from upstream
-  `18d059fafb5abb298b4b218afd712f83d11f19ce`.
-- **Fork/upstream:** Pushed to the fork; upstream contribution planned after
-  independent review, with no PR submitted.
+- **Implementation:** Original correction `e69ee28`; reviewed production
+  refinement `872155a`; both integrated in `hdr-lung/development`.
+- **Internal tests:** Helper and synthetic RTPLAN import coverage at `5104481`
+  and `f13fec9`; whitespace-only cleanup at `a0a93ad`.
+- **Fork/upstream:** Integrated on the fork's HDR development branch. No
+  upstream PR has been submitted. A future production-only branch should be
+  prepared from current CLRP `main`; internal test files must remain internal.
 - **CIHR:** Not applicable to the permanent-LDR workflow; no integration planned
   without regression evidence.
-- **HDR/deployment:** Not integrated; no HDR binary deployed.
-- **Validation:** Seven synthetic test groups passed, including single-channel
-  and independently normalized multi-channel HDR, invalid-input rejection,
-  atomic error output, and permanent-LDR weighted-position regression. The full
-  Qt application built successfully; the focused suite passed AddressSanitizer,
-  leak detection, and UndefinedBehaviorSanitizer.
-- **Next action:** Review the independent correction before any integration into
-  `hdr-lung/development` or upstream PR submission.
+- **HDR/deployment:** Integrated in `hdr-lung/development`; isolated validation
+  executable deployment is pending.
+- **Validation:** Eight helper-level groups and three parser-path RTPLAN import
+  cases passed normally and under AddressSanitizer, leak detection, and
+  UndefinedBehaviorSanitizer. Coverage includes independent per-channel
+  normalization, stationary-position tolerance, inactive zero-duration pairs,
+  malformed timing rollback, and permanent-LDR weighted-position compatibility.
+  The cumulative parser and timing suite passed and the full Qt application
+  built successfully.
+- **Next action:** Validate the approved anonymized HDR plan in the isolated
+  validation runtime before preparing any production-only upstream branch.
 
 ### HDR-002: Atomic dwell/activity loading and scaling state
 
