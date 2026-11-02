@@ -306,14 +306,46 @@ remain separate changes; implementing one does not validate the others.
 ### HDR-002: Atomic dwell/activity loading and scaling state
 
 - **Type:** Bug fix and scientific prerequisite.
-- **Problem:** Automatic loading can leave the path, maximum dwell, file type, or
-  scaling state incomplete or stale.
-- **Branch/commit:** Proposed `fix/dwell-loader-scaling-state`; not implemented.
-- **Fork/upstream:** Not pushed; upstream status under consideration.
-- **CIHR/HDR/deployment:** Not integrated or deployed.
-- **Validation required:** Synthetic dwell and activity files, count mismatch,
-  stale-state, zero/negative value, and scaling tests.
-- **Next action:** Start only after HDR-001 review.
+- **Problem:** Manual and automatic loading could leave file path, type, ordered
+  values, and maximum dwell/activity inconsistent or stale. Automatic loading
+  could loop or miscount, and input generation could silently fall back to equal
+  weights while retaining stale scaling state.
+- **Production commit:** `f44ca7c1e3fc6e6df67644d5829c3835c60049fb`.
+- **Internal tests:** Application-state coverage at
+  `f02dcee913f833f986825a71b8636d1163e3a29f`; test-backend cleanup at
+  `dfbe4557a230b098f06d1633adc2f00d955d4a8c`.
+- **Fork/upstream:** Integrated in `hdr-lung/development`; no upstream PR or
+  production-only contribution branch has been created.
+- **CIHR/HDR/deployment:** Not integrated into CIHR and not deployed. Present in
+  cumulative HDR development only.
+- **Validation:** Synthetic application-state tests cover `.dwell` loading,
+  `.activity` fallback, multiline ordered weights in generated input,
+  independently calculated maximum-dwell scaling, valid zero activity weights,
+  missing/malformed/nonfinite/negative/all-zero/count-mismatched files,
+  post-selection file mutation, stale-state clearing, temporary-treatment hard
+  failure, and permanent-LDR compatibility. The test passed normally and under
+  AddressSanitizer and UndefinedBehaviorSanitizer. LeakSanitizer was limited by
+  unrelated pre-existing Qt offscreen and GUI-object lifetime allocations; no
+  reported leak stack involved HDR-002 functions. All existing parser/timing
+  regressions passed normally and with sanitizers, and the full application
+  built successfully.
+- **Upstream PR summary:**
+  - **Problem:** Dwell/activity loading updated path, value count, and maximum
+    scaling state inconsistently. Missing or invalid files could retain stale
+    state or silently generate equal source weights, compromising HDR input
+    weighting and scaling.
+  - **Correction:** Parse and validate the complete file and transformation
+    count before atomically committing path, file type, ordered values, and
+    maximum. Revalidate before input generation and abort temporary-treatment
+    generation on missing or incompatible state.
+  - **Validation:** Synthetic manual-state, automatic `.dwell`/`.activity`,
+    malformed-input, stale-transition, generated-source-weight, scaling, and
+    permanent-LDR compatibility cases passed. Full application build and
+    existing parser/timing regressions passed. Source calibration, reference
+    time/decay, run mode, orientation, CT geometry, and absolute-Gy validation
+    remain separate prerequisites.
+- **Next action:** Review before deployment or preparation of any
+  production-only upstream branch.
 
 ### HDR-003: Stepping-source run-mode safeguards
 
