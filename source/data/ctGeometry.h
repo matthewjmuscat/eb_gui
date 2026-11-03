@@ -5,6 +5,8 @@
 #include <QString>
 #include <QVector>
 
+#include <limits>
+
 namespace CTGeometry {
 
 enum Result {
@@ -31,7 +33,7 @@ struct Slice {
     int columns = 0;
     double rowSpacingMm = 0.0;
     double columnSpacingMm = 0.0;
-    double sliceThicknessMm = 0.0;
+    double sliceThicknessMm = std::numeric_limits<double>::quiet_NaN();
     Vector positionMm;
     Vector rowDirection;
     Vector columnDirection;

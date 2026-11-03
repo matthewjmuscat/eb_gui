@@ -577,14 +577,12 @@ int Data::buildEgsphant(EGSPhant* phant, QString* log, int contourNum, int defau
 		
 		// Slice Thickness (Decimal String, in mm)
 		tempAtt = CT_data[i]->getEntry(0x0018,0x0050);
-		if (tempAtt->tag[0] == 0x0018 && tempAtt->tag[1] == 0x0050) {
+		if (tempAtt->tag[0] == 0x0018 && tempAtt->tag[1] == 0x0050 && tempAtt->vl > 0) {
 			QVector<double> values;
 			if (!parseDecimalAttribute(tempAtt, 1, &values))
 				return 209;
 			geometry.sliceThicknessMm = values[0];
-		} 
-		else
-			return 202;
+		}
 		
 		// Image Position [x,y,z] (Decimal String, in mm)
 		tempAtt = CT_data[i]->getEntry(0x0020,0x0032);

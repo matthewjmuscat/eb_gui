@@ -75,13 +75,11 @@ Result build(const QVector<Slice> &slices, Mapping *mapping, QString *error) {
     }
     if (!std::isfinite(reference.rowSpacingMm) ||
         !std::isfinite(reference.columnSpacingMm) ||
-        !std::isfinite(reference.sliceThicknessMm) ||
         !std::isfinite(reference.positionMm.x) ||
         !std::isfinite(reference.positionMm.y) ||
         !std::isfinite(reference.positionMm.z) ||
-        reference.rowSpacingMm <= 0 || reference.columnSpacingMm <= 0 ||
-        reference.sliceThicknessMm <= 0) {
-        *error = "CT pixel spacing and slice thickness must be finite and positive.";
+        reference.rowSpacingMm <= 0 || reference.columnSpacingMm <= 0) {
+        *error = "CT pixel spacing and position must be finite, with positive in-plane spacing.";
         return InvalidSpacing;
     }
 
@@ -97,7 +95,6 @@ Result build(const QVector<Slice> &slices, Mapping *mapping, QString *error) {
         int currentRowAxis = -1, currentRowSign = 0;
         int currentColumnAxis = -1, currentColumnSign = 0;
         if (slice.rows != reference.rows || slice.columns != reference.columns ||
-            !std::isfinite(slice.sliceThicknessMm) || slice.sliceThicknessMm <= 0 ||
             !nearlyEqual(slice.rowSpacingMm, reference.rowSpacingMm) ||
             !nearlyEqual(slice.columnSpacingMm, reference.columnSpacingMm) ||
             !axisDirection(slice.rowDirection, &currentRowAxis, &currentRowSign) ||
@@ -143,6 +140,10 @@ Result build(const QVector<Slice> &slices, Mapping *mapping, QString *error) {
 
     mapping->zBoundariesCm.resize(slices.size()+1);
     if (slices.size() == 1) {
+        if (!std::isfinite(reference.sliceThicknessMm) || reference.sliceThicknessMm <= 0) {
+            *error = "A single-slice CT requires a finite positive SliceThickness.";
+            return InvalidSpacing;
+        }
         mapping->zBoundariesCm[0] =
             (reference.positionMm.z-reference.sliceThicknessMm/2.0)/10.0;
         mapping->zBoundariesCm[1] =
