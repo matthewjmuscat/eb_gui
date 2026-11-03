@@ -11,6 +11,7 @@ INCLUDEPATH += ../source
 
 HEADERS += ../source/data.h \
            ../source/interface.h \
+           ../source/data/ctGeometry.h \
            ../source/data/DICOM.h \
            ../source/data/planTiming.h \
            ../source/data/dose.h \
@@ -26,6 +27,7 @@ HEADERS += ../source/data.h \
 SOURCES += hdr_dwell_state_test.cpp \
            ../source/data.cpp \
            ../source/interface.cpp \
+           ../source/data/ctGeometry.cpp \
            ../source/data/database.cpp \
            ../source/data/DICOM.cpp \
            ../source/data/planTiming.cpp \

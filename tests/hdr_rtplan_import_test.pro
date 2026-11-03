@@ -13,6 +13,7 @@ TARGET = hdr_rtplan_import_test
 INCLUDEPATH += ../source
 
 HEADERS += ../source/data.h \
+           ../source/data/ctGeometry.h \
            ../source/data/DICOM.h \
            ../source/data/planTiming.h \
            ../source/data/dose.h \
@@ -22,6 +23,7 @@ HEADERS += ../source/data.h \
 
 SOURCES += hdr_rtplan_import_test.cpp \
            ../source/data.cpp \
+           ../source/data/ctGeometry.cpp \
            ../source/data/DICOM.cpp \
            ../source/data/database.cpp \
            ../source/data/planTiming.cpp \
