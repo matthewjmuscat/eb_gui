@@ -43,6 +43,7 @@
 struct stat info; // required struct for using sys/stat
 
 #include "data.h"
+#include "data/ctGeometry.h"
 #include "data/planTiming.h"
 #include "interface.h" // Needed for some compiler variables
 
@@ -56,6 +57,24 @@ struct stat info; // required struct for using sys/stat
 bool exists(QString path){
     std::string str = path.toStdString();
     return stat(str.c_str(), &info) == 0;
+}
+
+bool parseDecimalAttribute(Attribute *attribute, int expectedValues, QVector<double> *values) {
+	QString text;
+	for (unsigned int i = 0; i < attribute->vl; i++)
+		text.append(attribute->vf[i]);
+	QStringList fields = text.split('\\', QString::SkipEmptyParts);
+	if (fields.size() != expectedValues)
+		return false;
+	values->clear();
+	for (const QString &field : fields) {
+		bool ok = false;
+		double value = field.trimmed().toDouble(&ok);
+		if (!ok || !qIsFinite(value))
+			return false;
+		values->append(value);
+	}
+	return true;
 }
 
 void deleteAttributes(QVector<Attribute *> *attributes) {
@@ -522,15 +541,13 @@ int Data::buildEgsphant(EGSPhant* phant, QString* log, int contourNum, int defau
 	// Read CT data
 	// Sort out all the DICOM data into the following
 	double rescaleM = 1, rescaleB = 0, rescaleFlag;
-    QVector <QVector <QVector <short int> > > HU;
-    QVector <unsigned short int> xPix;
-    QVector <unsigned short int> yPix;
-    QVector <QVector <double> > imagePos;
-    QVector <QVector <double> > xySpacing;
-    QVector <double> zSpacing;
+	QVector <QVector <QVector <short int> > > rawHU;
+	QVector <CTGeometry::Slice> sliceGeometry;
 	short int minCTHU = std::numeric_limits<short int>::max(), maxCTHU = std::numeric_limits<short int>::min();
 	
 	*log = *log + "--- Parsing DICOM CT data ---\n";
+	if (CT_data.isEmpty())
+		return 209;
     double increment = 5./double(CT_data.size()); // First 10% is reading DICOM
 	emit newProgressName("Parsing DICOM data");
 	
@@ -544,20 +561,16 @@ int Data::buildEgsphant(EGSPhant* phant, QString* log, int contourNum, int defau
 		
 		rescaleFlag = 0;
 		Attribute* tempAtt;
+		CTGeometry::Slice geometry;
 		
 		// Pixel Spacing (Decimal String), row spacing and then column spacing (in mm)
 		tempAtt = CT_data[i]->getEntry(0x0028,0x0030);
 		if (tempAtt->tag[0] == 0x0028 && tempAtt->tag[1] == 0x0030) {
-			xySpacing.resize(xySpacing.size()+1);
-			xySpacing.last().resize(2);
-
-			QString temp = "";
-			for (unsigned int s = 0; s < tempAtt->vl; s++) {
-				temp.append(tempAtt->vf[s]);
-			}
-
-			xySpacing.last()[0] = (temp.split('\\',QString::SkipEmptyParts)[0]).toDouble();
-			xySpacing.last()[1] = (temp.split('\\',QString::SkipEmptyParts)[1]).toDouble();
+			QVector<double> values;
+			if (!parseDecimalAttribute(tempAtt, 2, &values))
+				return 209;
+			geometry.rowSpacingMm = values[0];
+			geometry.columnSpacingMm = values[1];
 		}
 		else
 			return 201;
@@ -565,12 +578,10 @@ int Data::buildEgsphant(EGSPhant* phant, QString* log, int contourNum, int defau
 		// Slice Thickness (Decimal String, in mm)
 		tempAtt = CT_data[i]->getEntry(0x0018,0x0050);
 		if (tempAtt->tag[0] == 0x0018 && tempAtt->tag[1] == 0x0050) {
-			QString temp = "";
-			for (unsigned int s = 0; s < tempAtt->vl; s++) {
-				temp.append(tempAtt->vf[s]);
-			}
-
-			zSpacing.append(temp.toDouble());
+			QVector<double> values;
+			if (!parseDecimalAttribute(tempAtt, 1, &values))
+				return 209;
+			geometry.sliceThicknessMm = values[0];
 		} 
 		else
 			return 202;
@@ -578,30 +589,43 @@ int Data::buildEgsphant(EGSPhant* phant, QString* log, int contourNum, int defau
 		// Image Position [x,y,z] (Decimal String, in mm)
 		tempAtt = CT_data[i]->getEntry(0x0020,0x0032);
 		if (tempAtt->tag[0] == 0x0020 && tempAtt->tag[1] == 0x0032) {
-			imagePos.resize(imagePos.size()+1);
-			imagePos.last().resize(3);
-
-			QString temp = "";
-			for (unsigned int s = 0; s < tempAtt->vl; s++) {
-				temp.append(tempAtt->vf[s]);
-			}
-
-			imagePos.last()[0] = (temp.split('\\',QString::SkipEmptyParts)[0]).toDouble();
-			imagePos.last()[1] = (temp.split('\\',QString::SkipEmptyParts)[1]).toDouble();
-			imagePos.last()[2] = (temp.split('\\',QString::SkipEmptyParts)[2]).toDouble();
+			QVector<double> values;
+			if (!parseDecimalAttribute(tempAtt, 3, &values))
+				return 209;
+			geometry.positionMm = CTGeometry::Vector(
+				values[0], values[1], values[2]
+			);
 		} 
 		else
 			return 203;
+
+		// Image Orientation Patient: row direction, then column direction.
+		tempAtt = CT_data[i]->getEntry(0x0020,0x0037);
+		if (tempAtt->tag[0] == 0x0020 && tempAtt->tag[1] == 0x0037) {
+			QVector<double> values;
+			if (!parseDecimalAttribute(tempAtt, 6, &values))
+				return 209;
+			geometry.rowDirection = CTGeometry::Vector(
+				values[0], values[1], values[2]
+			);
+			geometry.columnDirection = CTGeometry::Vector(
+				values[3], values[4], values[5]
+			);
+		}
+		else
+			return 206;
 		
 		// Rows
 		tempAtt = CT_data[i]->getEntry(0x0028,0x0010);
 		if (tempAtt->tag[0] == 0x0028 && tempAtt->tag[1] == 0x0010) {
+			if (tempAtt->vl != 2)
+				return 209;
 			if (CT_data[i]->isBigEndian)
-				xPix.append((unsigned short int)(((short int)(tempAtt->vf[0]) << 8) +
-				(short int)(tempAtt->vf[1])));
+				geometry.rows = (unsigned short int)(((short int)(tempAtt->vf[0]) << 8) +
+					(short int)(tempAtt->vf[1]));
 			else
-				xPix.append((unsigned short int)(((short int)(tempAtt->vf[1]) << 8) +
-				(short int)(tempAtt->vf[0])));	
+				geometry.rows = (unsigned short int)(((short int)(tempAtt->vf[1]) << 8) +
+					(short int)(tempAtt->vf[0]));
 		}
 		else
 			return 204;
@@ -609,12 +633,14 @@ int Data::buildEgsphant(EGSPhant* phant, QString* log, int contourNum, int defau
 		// Columns
 		tempAtt = CT_data[i]->getEntry(0x0028,0x0011);
 		if (tempAtt->tag[0] == 0x0028 && tempAtt->tag[1] == 0x0011) {
+			if (tempAtt->vl != 2)
+				return 209;
 			if (CT_data[i]->isBigEndian)
-				yPix.append((unsigned short int)(((short int)(tempAtt->vf[0]) << 8) +
-				(short int)(tempAtt->vf[1])));
+				geometry.columns = (unsigned short int)(((short int)(tempAtt->vf[0]) << 8) +
+					(short int)(tempAtt->vf[1]));
 			else
-				yPix.append((unsigned short int)(((short int)(tempAtt->vf[1]) << 8) +
-				(short int)(tempAtt->vf[0])));		
+				geometry.columns = (unsigned short int)(((short int)(tempAtt->vf[1]) << 8) +
+					(short int)(tempAtt->vf[0]));
 		} 
 		else
 			return 205;
@@ -646,45 +672,55 @@ int Data::buildEgsphant(EGSPhant* phant, QString* log, int contourNum, int defau
 		// HU values
 		tempAtt = CT_data[i]->getEntry(0x7FE0,0x0010);
 		if (tempAtt->tag[0] == 0x7FE0 && tempAtt->tag[1] == 0x0010) {
-			HU.resize(HU.size()+1);
-			if (HU.size() == xPix.size() && HU.size() == yPix.size()) {
-				HU.last().resize(yPix.last());
-				for (unsigned int k = 0; k < yPix.last(); k++) {
-					HU.last()[k].resize(xPix.last());
-				}
-				
-				short int temp;
-				if (CT_data[i]->isBigEndian)
-					for (unsigned int s = 0; s < tempAtt->vl; s+=2) {
-						temp  = (tempAtt->vf[s+1]);
-						temp += (short int)(tempAtt->vf[s]) << 8;
-						short int convertedHU = rescaleFlag == 2 ? rescaleM*temp+rescaleB : temp;
-						
-						HU.last()[int(int(s/2)/xPix.last())][int(s/2)%xPix.last()] = convertedHU;
-						minCTHU = std::min(minCTHU, convertedHU);
-						maxCTHU = std::max(maxCTHU, convertedHU);
-					}
-				else
-					for (unsigned int s = 0; s < tempAtt->vl; s+=2) {
-						temp  = (tempAtt->vf[s]);
-						temp += (short int)(tempAtt->vf[s+1]) << 8;
-						short int convertedHU = rescaleFlag == 2 ? rescaleM*temp+rescaleB : temp;
-						
-						HU.last()[int(int(s/2)/xPix.last())][int(s/2)%xPix.last()] = convertedHU;
-						minCTHU = std::min(minCTHU, convertedHU);
-						maxCTHU = std::max(maxCTHU, convertedHU);
-					}
+			if (geometry.rows <= 0 || geometry.columns <= 0 ||
+				tempAtt->vl != static_cast<unsigned long>(geometry.rows*geometry.columns*2))
+				return 208;
+			rawHU.resize(rawHU.size()+1);
+			rawHU.last().resize(geometry.rows);
+			for (int row = 0; row < geometry.rows; row++)
+				rawHU.last()[row].resize(geometry.columns);
+			for (int pixel = 0; pixel < geometry.rows*geometry.columns; pixel++) {
+				unsigned int offset = 2*pixel;
+				quint16 raw = CT_data[i]->isBigEndian ?
+					(static_cast<quint16>(tempAtt->vf[offset]) << 8) |
+					 static_cast<quint16>(tempAtt->vf[offset+1]) :
+					(static_cast<quint16>(tempAtt->vf[offset+1]) << 8) |
+					 static_cast<quint16>(tempAtt->vf[offset]);
+				short int value = static_cast<qint16>(raw);
+				short int convertedHU = rescaleFlag == 2 ? rescaleM*value+rescaleB : value;
+				rawHU.last()[pixel/geometry.columns][pixel%geometry.columns] = convertedHU;
+				minCTHU = std::min(minCTHU, convertedHU);
+				maxCTHU = std::max(maxCTHU, convertedHU);
 			}
 		}
 		else
 			return 208;
+		sliceGeometry.append(geometry);
 		
 		#if defined(DEBUG_BUILDEGSPHANT)
 			std::cout << " parsed!\n"; std::cout.flush();
 		#endif
 		
     }
-	*log = *log + "Extracted all HU data for the " + QString::number(CT_data.size()) + " (" + QString::number(xPix[0]) + "x" + QString::number(yPix[0]) + ") slices\n";
+	CTGeometry::Mapping geometryMapping;
+	QString geometryError;
+	if (CTGeometry::build(sliceGeometry, &geometryMapping, &geometryError) != CTGeometry::Success) {
+		*log = *log + "CT geometry error: " + geometryError + "\n";
+		return 209;
+	}
+	QVector <QVector <QVector <short int> > > HU(geometryMapping.nz);
+	for (int k = 0; k < geometryMapping.nz; k++) {
+		HU[k].resize(geometryMapping.ny);
+		for (int y = 0; y < geometryMapping.ny; y++)
+			HU[k][y].resize(geometryMapping.nx);
+		int sourceSlice = geometryMapping.sliceOrder[k];
+		for (int row = 0; row < sliceGeometry[sourceSlice].rows; row++)
+			for (int column = 0; column < sliceGeometry[sourceSlice].columns; column++) {
+				QPoint destination = geometryMapping.mapPixel(row, column);
+				HU[k][destination.y()][destination.x()] = rawHU[sourceSlice][row][column];
+			}
+	}
+	*log = *log + "Extracted all HU data for the " + QString::number(CT_data.size()) + " (" + QString::number(geometryMapping.nx) + "x" + QString::number(geometryMapping.ny) + ") slices\n";
 	*log = *log + "-----------------------------\n";
 	if (minCTHU < HUMap.first() || maxCTHU > HUMap.last()) {
 		QString warning = tr("Some CT HU values fall outside the selected HU-to-density calibration table.\n\n")
@@ -714,13 +750,12 @@ int Data::buildEgsphant(EGSPhant* phant, QString* log, int contourNum, int defau
 		<< CT_data.size() << " (" << xPix[0] << "x" << yPix[0] << ") slices\n";  std::cout.flush();
 	#endif
 	
-	// Assume first slice matches the rest and set x, y, and z boundaries
-	phant->nx = xPix[0];
-	phant->ny = yPix[0];
-	phant->nz = CT_data.size();
-    phant->x.fill(0,phant->nx+1);
-    phant->y.fill(0,phant->ny+1);
-    phant->z.fill(0,phant->nz+1);
+	phant->nx = geometryMapping.nx;
+	phant->ny = geometryMapping.ny;
+	phant->nz = geometryMapping.nz;
+	phant->x = geometryMapping.xBoundariesCm;
+	phant->y = geometryMapping.yBoundariesCm;
+	phant->z = geometryMapping.zBoundariesCm;
 	
 	QMap <QString, int> medVol, structVol; // Arrays for holding voxel counts for log file
 	for (int i = 0; i < structName.size(); i++)
@@ -728,29 +763,6 @@ int Data::buildEgsphant(EGSPhant* phant, QString* log, int contourNum, int defau
 	for (int i = 0; i < phant->media.size(); i++)
 		medVol[phant->media[i]] = 0;
 	
-	#if defined(DEBUG_BUILDEGSPHANT)
-		std::cout << "  Assigning x and y bounds\n"; std::cout.flush();
-	#endif
-	
-    for (int i = 0; i <= phant->nx; i++)
-		phant->x[i] = (imagePos[0][0]+(i-0.5)*xySpacing[0][0])/10.0;
-    for (int i = 0; i <= phant->ny; i++)
-		phant->y[i] = (imagePos[0][1]+(i-0.5)*xySpacing[0][1])/10.0;
-
-	// Define z bound values
-	#if defined(DEBUG_BUILDEGSPHANT)
-		std::cout << "  Assigning slice z bounds\n"; std::cout.flush();
-	#endif
-	
-	double prevZ, nextZ;
-	nextZ = imagePos[0][2]-zSpacing[0]/2.0;
-    for (int i = 0; i < phant->nz; i++) {
-		prevZ = nextZ/2.0 + (imagePos[i][2]-zSpacing[i]/2.0)/2.0;
-		nextZ = imagePos[i][2]+zSpacing[i]/2.0;
-		phant->z[i] = prevZ/10.0;
-	}
-	phant->z.last() = nextZ/10.0;
-		
 	// Set up media array
 	{
 		QVector <char> mz(phant->nz, 0);

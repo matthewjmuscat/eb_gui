@@ -595,16 +595,22 @@ void phantInterface::createEGSphant() {
         tr("Could not find field ") + "Slice Thickness (0018,0050)" + tr (" in CT DICOM file.  Aborting"));
 	else if (err == 203)
 		QMessageBox::warning(0, "DICOM error",
-        tr("Could not find field ") + "Image Position (0028,0032)" + tr (" in CT DICOM file.  Aborting"));
+        tr("Could not find field ") + "Image Position Patient (0020,0032)" + tr (" in CT DICOM file.  Aborting"));
 	else if (err == 204)
 		QMessageBox::warning(0, "DICOM error",
         tr("Could not find field ") + "Rows (0028,0010)" + tr (" in CT DICOM file.  Aborting"));
 	else if (err == 205)
 		QMessageBox::warning(0, "DICOM error",
         tr("Could not find field ") + "Columns (0028,0011)" + tr (" in CT DICOM file.  Aborting"));
+	else if (err == 206)
+		QMessageBox::warning(0, "DICOM error",
+        tr("Could not find field ") + "Image Orientation Patient (0020,0037)" + tr (" in CT DICOM file.  Aborting"));
 	else if (err == 208)
 		QMessageBox::warning(0, "DICOM error",
         tr("Could not find field ") + "HU values (7fe0,0010)" + tr (" in CT DICOM file.  Aborting"));
+	else if (err == 209)
+		QMessageBox::warning(0, "DICOM geometry error",
+        textLog + tr("VPM generation was aborted before writing output."));
 		
 	parent->finishedProgress();
 }

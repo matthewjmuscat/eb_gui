@@ -23,6 +23,7 @@ DEFINES += QT_DEPRECATED_WARNINGS
 # Input
 HEADERS += data.h \
            interface.h \
+           data/ctGeometry.h \
            data/DICOM.h \
            data/planTiming.h \
            data/dose.h \
@@ -37,6 +38,7 @@ HEADERS += data.h \
 SOURCES += data.cpp \
            interface.cpp \
            main.cpp \
+           data/ctGeometry.cpp \
            data/database.cpp \
            data/DICOM.cpp \
            data/planTiming.cpp \
