@@ -432,13 +432,29 @@ remain separate changes; implementing one does not validate the others.
 - **Type:** Scientific prerequisite.
 - **Problem:** Plan import writes translations but does not preserve control-point
   source orientation needed for anisotropic source models.
-- **Branch/commit:** Proposed `fix/hdr-source-orientation`; not implemented.
-- **Fork/upstream:** Not pushed; upstream status under consideration.
-- **CIHR/HDR/deployment:** Not integrated or deployed.
-- **Validation required:** Defined source-axis convention, synthetic rotations,
-  model-specific checks, and an independently reviewed orientation reference.
-- **Next action:** Confirm orientation metadata and selected source model before
-  choosing a mapping or fallback.
+- **Production commit:** `d508414b763fe0f3e7d3b759b5156670ce2e1cfe`.
+- **Internal test commit:** `9af2aa1d39405fb89aaffbaec7d5010262f3bcd2`.
+- **Correction:** Temporary RTPLAN import now decodes binary FL Control Point
+  Orientation `(300A,0412)` using the plan transfer syntax, validates finite
+  nonzero and consistent vectors across each active dwell pair, normalizes one
+  vector per dwell, and writes it as an EGSnrc `rotation vector`. The DICOM vector
+  is the source long axis in insertion direction in patient coordinates; the
+  EGSnrc transformation maps the model's local positive z-axis to that vector.
+- **Failure behavior:** Missing, malformed, zero, nonfinite, or inconsistent
+  temporary-source orientation aborts the import with atomic rollback. Permanent
+  LDR remains translation-only to preserve established behavior pending a
+  separately justified LDR orientation change.
+- **Fork/upstream:** Integrated locally on `hdr-lung/development`; push pending
+  completion of the current safeguard sequence. Plan an HDR RTPLAN orientation
+  contribution separate from source calibration and general lifecycle handling.
+- **CIHR/HDR/deployment:** Not synchronized to CIHR and not deployed.
+- **Validation:** Synthetic signed and non-unit vectors were normalized and
+  retained in dwell order. Missing and inconsistent orientations were rejected;
+  five RTPLAN import groups and eight timing groups passed, including permanent
+  LDR compatibility. The complete Qt application compiled and linked.
+- **Next action:** Include orientation lines in generated-input review and compare
+  anisotropy-sensitive dose against an independent source-model reference during
+  end-to-end validation.
 
 ### HDR-006: Referenced-source validation
 
