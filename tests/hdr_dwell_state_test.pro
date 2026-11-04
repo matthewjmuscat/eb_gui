@@ -15,6 +15,7 @@ HEADERS += ../source/data.h \
            ../source/data/DICOM.h \
            ../source/data/planTiming.h \
            ../source/data/sourceCalibration.h \
+           ../source/data/simulationResult.h \
            ../source/data/dose.h \
            ../source/data/egsphant.h \
            ../source/data/input.h \
@@ -33,6 +34,7 @@ SOURCES += hdr_dwell_state_test.cpp \
            ../source/data/DICOM.cpp \
            ../source/data/planTiming.cpp \
            ../source/data/sourceCalibration.cpp \
+           ../source/data/simulationResult.cpp \
            ../source/data/dose.cpp \
            ../source/data/egsphant.cpp \
            ../source/data/input.cpp \
