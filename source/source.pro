@@ -28,6 +28,7 @@ HEADERS += data.h \
            data/ctGeometry.h \
            data/DICOM.h \
            data/planTiming.h \
+           data/runMode.h \
            data/sourceCalibration.h \
            data/simulationResult.h \
            data/dose.h \
@@ -48,6 +49,7 @@ SOURCES += data.cpp \
            data/database.cpp \
            data/DICOM.cpp \
            data/planTiming.cpp \
+           data/runMode.cpp \
            data/sourceCalibration.cpp \
            data/simulationResult.cpp \
            data/dose.cpp \

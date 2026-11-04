@@ -43,6 +43,7 @@
 #include "GUI/ebInterface.h"
 #include "GUI/doseInterface.h"
 #include "GUI/appInterface.h"
+#include "data/runMode.h"
 #include "data/sourceCalibration.h"
 
 namespace {
@@ -1365,9 +1366,11 @@ int Interface::populateEgsinp() {
 	egsinp->RC_egsdatFormat = "text";  // Pre-set parameter
 	
 	// run mode
-	egsinp->RM_normal = ((ebInterface*)ebInt)->runModeBox->currentText(); // GUI parameter
-	if (((ebInterface*)ebInt)->waterBox->isChecked())
-		egsinp->RM_normal = "superposition"; // GUI parameter
+	egsinp->RM_normal = RunMode::resolve(
+		((ebInterface*)ebInt)->runModeBox->currentText(),
+		((ebInterface*)ebInt)->waterBox->isChecked(),
+		sourcePermTime->isChecked()
+	);
 	
 	// media definition
 	egsinp->Med_AE   = data->def_AE; // Configuration parameter
