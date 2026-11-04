@@ -396,8 +396,8 @@ remain separate changes; implementing one does not validate the others.
 - **Problem:** Missing or invalid source-model air-kerma calibration can retain a
   clinical scale numerically after warning of a fallback, yielding output that
   must not be interpreted as Gy.
-- **Production commit:** `bfd6387b90069fce67f7a786e39d890034408252`.
-- **Internal test commit:** `5d3702a43aa001648be745906c9f8c11a20c7ff9`.
+- **Production commit:** `bfd63877b28fec4ff4bbb26f0c6d7f59f25eab77`.
+- **Internal test commit:** `5d3702a62ef694a8b759c98428d6b0618ec194a7`.
 - **Correction:** Air-kerma scaling now requires finite positive clinical
   strength, exposure time, and source-model air-kerma per primary history. Input
   generation aborts when the source geometry is unavailable or its calibration
