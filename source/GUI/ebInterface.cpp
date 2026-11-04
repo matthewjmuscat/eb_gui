@@ -37,6 +37,7 @@
 ################################################################################
 */
 #include "ebInterface.h"
+#include "data/simulationResult.h"
 #include <QSaveFile>
 
 // Constructors
@@ -286,8 +287,6 @@ void ebInterface::connectLayout() {
 			this, SLOT(saveLogEB()));
     connect(ebProcess, SIGNAL(finished(int, QProcess::ExitStatus)), 
         this, SLOT(finishEB(int, QProcess::ExitStatus)));
-	connect(ebProcess, SIGNAL(finished(int)),
-			this, SLOT(finishEB(int)));
 	connect(ebProcess, SIGNAL(readyReadStandardOutput()),
 			this, SLOT(writeOutputToConsole()));
 			
@@ -511,6 +510,15 @@ void ebInterface::runEB() {
 	// Create the egsinp file
 	ebName = fileNameEdit->text();
     QString egsinp_path = parent->data->eb_location + "/" + ebName + ".egsinp";
+	QStringList existingDosePaths = SimulationResult::findDosePaths(
+		parent->data->eb_location, ebName
+	);
+	if (!existingDosePaths.isEmpty()) {
+		QMessageBox::warning(0, "existing simulation output",
+			tr("Raw dose output already exists for simulation ") + ebName
+			+ tr(" in the egs_brachy run directory. Move or rename the existing output before starting a new run."));
+		return;
+	}
 	
 	if (QFile::exists(egsinp_path) && QMessageBox::Yes != QMessageBox::question(this, "Name already found",
 		tr("An egsinp file named ") + ebName + tr(" already exists.  Would you like to overwrite it?")))
@@ -672,64 +680,67 @@ void ebInterface::finishEB(int code, QProcess::ExitStatus status) {
     console->outputArea->insertPlainText("Exit code: " + QString::number(code) 
                                         + "\nStatus: " + exitStatusToString(status) + "\n");
     
-	if (code == 1) {
-		QMessageBox::warning(0, "egs_brachy error",
-        tr("The egs_brachy simulation ") + ebName + tr(" failed to run successfully.") 
-        + tr("\n\nOutput:\n") + stdoutData + tr("\n\nErrors:\n") + stderrData);		
-		return;
-	}
-	else if (ebKillFlag) {
+	if (ebKillFlag) {
 		QMessageBox::information(0, "egs_brachy killed",
 		tr("The egs_brachy simulation ") + ebName + tr(" has been killed."));
 		return;
 	}
-	
-	// If successful, copy 3ddose files to local database
-	QDirIterator* files;
-	QStringList doseNames;
-	char doseFlag = false;
-	files = new QDirIterator(parent->data->eb_location, {"*.3ddose","*.3ddose.gz"});
-	while(files->hasNext()) {
-		files->next();
-		if (files->fileName().startsWith(ebName+".")) {
-			doseNames << files->fileName();
-			QFile::copy(files->filePath(),
-			parent->data->gui_location + "/database/dose/" + files->fileName());
-			QFile::remove(files->filePath());
-			doseFlag = true;
-			
-			parent->data->localNameDoses << files->fileName();
-			parent->data->localDirDoses << parent->data->gui_location + "/database/dose/";
-		}
+
+	SimulationResult::Evaluation result = SimulationResult::evaluate(
+		parent->data->eb_location, ebName, code, status
+	);
+	if (!result.successful) {
+		QMessageBox::warning(0, "egs_brachy error",
+		tr("The egs_brachy simulation ") + ebName + tr(" failed to run successfully.\n")
+		+ result.error
+		+ tr("\n\nOutput:\n") + stdoutData + tr("\n\nErrors:\n") + stderrData);
+		return;
 	}
-	delete files;
+
+	QStringList doseNames;
+	QStringList copiedDosePaths;
+	QString doseDirectory = parent->data->gui_location + "/database/dose/";
+	for (const QString &sourcePath : result.dosePaths) {
+		QString fileName = QFileInfo(sourcePath).fileName();
+		QString destinationPath = doseDirectory+fileName;
+		if (QFileInfo::exists(destinationPath) || !QFile::copy(sourcePath, destinationPath)) {
+			for (const QString &copiedPath : copiedDosePaths)
+				QFile::remove(copiedPath);
+			QMessageBox::warning(0, "dose file error",
+				tr("The simulation completed, but a dose file could not be copied to the local repository:\n")
+				+ destinationPath + tr("\nSource files were retained."));
+			return;
+		}
+		copiedDosePaths << destinationPath;
+		doseNames << fileName;
+	}
+	for (const QString &sourcePath : result.dosePaths)
+		QFile::remove(sourcePath);
+	for (const QString &fileName : doseNames) {
+		parent->data->localNameDoses << fileName;
+		parent->data->localDirDoses << doseDirectory;
+	}
 	
 	// Copy any egsinp and egslog files that were generated
-	files = new QDirIterator(parent->data->eb_location, {"*.egsinp","*.egslog"});
+	QDirIterator* files = new QDirIterator(parent->data->eb_location, {"*.egsinp","*.egslog"});
 	while(files->hasNext()) {
 		files->next();
 		if (files->fileName().startsWith(ebName+".egs")) {
-			doseNames << files->fileName();
-			QFile::copy(files->filePath(),
-			parent->data->gui_location + "/database/dose/" + files->fileName());
-			QFile::remove(files->filePath());
+			QString destinationPath = doseDirectory+files->fileName();
+			if (QFile::copy(files->filePath(), destinationPath)) {
+				doseNames << files->fileName();
+				QFile::remove(files->filePath());
+			}
 		}
 	}
 	delete files;
 	
-	if (doseFlag) {
-		parent->doseRepopulate();
-		QMessageBox::information(0, "egs_brachy simulation complete",
-		tr("The egs_brachy simulation ") + ebName + tr(" finished successfully.\n") +
-		tr(doseNames.size()>1?"Files:\n   - ":"File:\n   - ") +
-		doseNames.join("\n   - ") +
-		tr("\ncopied to local repository."));
-	}
-	else {
-		QMessageBox::warning(0, "egs_brachy simulation complete",
-		tr("The egs_brachy simulation ") + ebName + tr(" finished successfully, "
-		   "but no output was found...\n"));
-	}
+	parent->doseRepopulate();
+	QMessageBox::information(0, "egs_brachy simulation complete",
+	tr("The egs_brachy simulation ") + ebName + tr(" finished successfully.\n") +
+	tr(doseNames.size()>1?"Files:\n   - ":"File:\n   - ") +
+	doseNames.join("\n   - ") +
+	tr("\ncopied to local repository."));
 }
 
 void ebInterface::killEB() {
