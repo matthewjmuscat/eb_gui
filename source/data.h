@@ -135,6 +135,12 @@ public:
 	
 	// functions
 	int loadDefaults();
+	void sortPhantomResources();
+	void sortSourceResources();
+	void sortTransformationResources();
+	void sortGeometryResources();
+	void sortDoseResources();
+	void sortResourceLists();
 	
 	// destructor
 	~Data();

@@ -36,6 +36,7 @@
 #
 ################################################################################
 */
+#include <QCollator>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <algorithm>  // min and max
@@ -50,6 +51,43 @@ struct stat info; // required struct for using sys/stat
 //#define DEBUG_BUILDEGSPHANT // Comment out
 #define ASSUME_PERMANENT_LDR // Used when there is no specification
 #define INTERPOLATE_CONTOURS // Used to create a new contour on slices between two contours from the same structure
+
+namespace {
+	struct ResourceEntry {
+		QString name;
+		QString dir;
+	};
+
+	void sortNameDirLists(QStringList &names, QStringList &dirs) {
+		if (names.size() != dirs.size())
+			return;
+
+		QVector <ResourceEntry> entries;
+		for (int i = 0; i < names.size(); i++) {
+			ResourceEntry entry;
+			entry.name = names[i];
+			entry.dir = dirs[i];
+			entries.append(entry);
+		}
+
+		QCollator collator;
+		collator.setNumericMode(true);
+		collator.setCaseSensitivity(Qt::CaseInsensitive);
+		std::stable_sort(entries.begin(), entries.end(), [&collator](const ResourceEntry &left, const ResourceEntry &right) {
+			int nameOrder = collator.compare(left.name, right.name);
+			if (nameOrder != 0)
+				return nameOrder < 0;
+			return collator.compare(left.dir, right.dir) < 0;
+		});
+
+		names.clear();
+		dirs.clear();
+		for (int i = 0; i < entries.size(); i++) {
+			names.append(entries[i].name);
+			dirs.append(entries[i].dir);
+		}
+	}
+}
 
 /*! \brief
   Determines whether or not a file or directory exists at a location in the filesystem specified by `path` 
@@ -97,6 +135,38 @@ int planTimingErrorCode(PlanTiming::Result result) {
 		case PlanTiming::Success: return 0;
 	}
 	return 304;
+}
+
+void Data::sortPhantomResources() {
+	sortNameDirLists(libNamePhants, libDirPhants);
+	sortNameDirLists(localNamePhants, localDirPhants);
+}
+
+void Data::sortSourceResources() {
+	sortNameDirLists(libNameSources, libDirSources);
+}
+
+void Data::sortTransformationResources() {
+	sortNameDirLists(libNameTransforms, libDirTransforms);
+	sortNameDirLists(localNameTransforms, localDirTransforms);
+}
+
+void Data::sortGeometryResources() {
+	sortNameDirLists(libNameGeometries, libDirGeometries);
+}
+
+void Data::sortDoseResources() {
+	sortNameDirLists(localNameDoses, localDirDoses);
+}
+
+void Data::sortResourceLists() {
+	sortNameDirLists(libNamePhants, libDirPhants);
+	sortNameDirLists(libNameSources, libDirSources);
+	sortNameDirLists(libNameTransforms, libDirTransforms);
+	sortNameDirLists(libNameGeometries, libDirGeometries);
+	sortNameDirLists(localNamePhants, localDirPhants);
+	sortNameDirLists(localNameTransforms, localDirTransforms);
+	sortNameDirLists(localNameDoses, localDirDoses);
 }
 
 void Data::expand_env_var(QString& str, const QString& var){
@@ -331,6 +401,8 @@ int Data::loadDefaults() {
 		}
 	}
 	delete files;
+
+	sortResourceLists();
 	
 	// Tissue assignment schemes
 	QString medName;

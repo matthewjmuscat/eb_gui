@@ -571,7 +571,9 @@ void phantInterface::createEGSphant() {
 			logFile.close();
 		}
 		
-		parent->phantomListView->setCurrentRow(parent->phantomListView->count()-1);
+		QList <QListWidgetItem*> createdPhantoms = parent->phantomListView->findItems(fileName+".egsphant.gz", Qt::MatchExactly);
+		if (createdPhantoms.size())
+			parent->phantomListView->setCurrentItem(createdPhantoms[0]);
 		
 		// Show the log
 		log->outputArea->clear();

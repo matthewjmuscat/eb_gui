@@ -354,7 +354,9 @@ void sourceInterface::parsePlan() {
 		}
 		
 		// Fill the proper fields
-		parent->transformationListView->setCurrentRow(parent->transformationListView->count()-1);
+		QList <QListWidgetItem*> importedTransforms = parent->transformationListView->findItems(fileName, Qt::MatchExactly);
+		if (importedTransforms.size())
+			parent->transformationListView->setCurrentItem(importedTransforms[0]);
 		isotopeEdit->setText(parent->data->isotopeName);
 		seedEdit->setText(parent->data->seedInfo);
 		seedCountEdit->setText(QString::number(parent->data->seedPos.size()));
