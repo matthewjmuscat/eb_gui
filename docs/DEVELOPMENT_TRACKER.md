@@ -156,6 +156,36 @@ is equivalent.
   `c294f792c238892673fe0f7b617c008a413a9c04`.
 - **Next action:** Combine with FIX-005 and FIX-006 for upstream review.
 
+### FIX-008: Simulation completion and output validation
+
+- **Type:** General-purpose bug fix and execution safeguard.
+- **Problem:** GUI completion handling treated only exit code 1 as failure,
+  ignored `CrashExit` and other nonzero codes, and described a zero-exit run with
+  no dose output as successful. Existing raw dose files could also be mistaken
+  for output from a new attempt, and failed copies were followed by source-file
+  removal.
+- **Production commit:** `42542d7f6cf596f9618edf76e36f659e79198d3d`.
+- **Internal test commit:** `262d8ce523451259ffbc9cab048a8da82e37ce71`.
+- **Correction:** A simulation succeeds only after `NormalExit`, exit code zero,
+  and at least one nonempty matching dose file. Runs are blocked when matching
+  raw dose output already exists. Dose sources are removed only after all dose
+  files copy successfully; copy failure rolls back newly copied destinations and
+  retains source output. The obsolete one-argument process-finished connection
+  was removed.
+- **Fork/upstream:** Integrated locally on `hdr-lung/development`; push pending
+  completion of the approved repair sequence. Plan a separate general simulation
+  lifecycle PR; do not combine it with HDR calibration or EGSnrc infrastructure.
+- **CIHR/HDR/deployment:** Not synchronized to CIHR and not deployed.
+- **Validation:** Focused tests passed for nonzero normal exit, crash exit, zero
+  exit without output, empty output, stale-output discovery, and zero exit with
+  nonempty dose output. The complete Qt application compiled and linked.
+- **Parallel investigation:** The local `egs-parallel-cpu` wrapper can time out
+  waiting for a lock and use a bare `exit`, masking submission failure with status
+  zero. The reason the worker did not create its lock remains unresolved. No
+  EGSnrc script or transport code was modified.
+- **Next action:** Keep the lock-file failure under investigation. Establish the
+  worker failure mechanism before separately approving any EGSnrc wrapper change.
+
 ## Fork features and workflow enhancements
 
 ### GUI-001: Plaque position and rotation controls
