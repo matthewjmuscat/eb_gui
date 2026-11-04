@@ -100,9 +100,19 @@ QByteArray temporaryChannel(
     double totalTimeSeconds,
     double finalWeight,
     const QVector<QByteArray> &controlPoints,
-    bool includeFinalWeight = true
+    bool includeFinalWeight = true,
+    int referencedSourceNumber = 1
 ) {
-    QByteArray item = textElement(
+    QByteArray item;
+    if (referencedSourceNumber > 0) {
+        item += textElement(
+            0x300c,
+            0x000e,
+            "IS",
+            QString::number(referencedSourceNumber)
+        );
+    }
+    item += textElement(
         0x300a,
         0x0286,
         "DS",
@@ -120,27 +130,43 @@ QByteArray temporaryChannel(
     return item;
 }
 
-QByteArray permanentChannel(const QVector<QByteArray> &controlPoints) {
-    return sequenceElement(0x300a, 0x02d0, controlPoints);
+QByteArray permanentChannel(
+    const QVector<QByteArray> &controlPoints,
+    int referencedSourceNumber = 1
+) {
+    return textElement(
+               0x300c,
+               0x000e,
+               "IS",
+               QString::number(referencedSourceNumber)
+           )+
+           sequenceElement(0x300a, 0x02d0, controlPoints);
 }
 
 void installPlan(
     Data *data,
     QString treatmentType,
     QString treatmentTechnique,
-    const QVector<QByteArray> &channels
+    const QVector<QByteArray> &channels,
+    const QVector<int> &sourceNumbers = {1}
 ) {
     DICOM *plan = new DICOM(&data->tag_data);
     plan->isImplicit = false;
 
-    QByteArray sourceItem = textElement(0x300a, 0x0226, "CS", "IR192") +
-                            textElement(0x300a, 0x0228, "DS", "73.83") +
-                            textElement(0x300a, 0x022a, "DS", "1.0");
+    QVector<QByteArray> sourceItems;
+    for (int sourceNumber : sourceNumbers) {
+        sourceItems.append(
+            textElement(0x300a, 0x0212, "IS", QString::number(sourceNumber))+
+            textElement(0x300a, 0x0226, "CS", "IR192")+
+            textElement(0x300a, 0x0228, "DS", "73.83")+
+            textElement(0x300a, 0x022a, "DS", "1.0")
+        );
+    }
     QByteArray applicationItem = sequenceElement(0x300a, 0x0280, channels);
 
     plan->data.append(valueAttribute(0x300a, 0x0200, treatmentTechnique));
     plan->data.append(valueAttribute(0x300a, 0x0202, treatmentType));
-    plan->data.append(sequenceAttribute(0x300a, 0x0210, {sourceItem}));
+    plan->data.append(sequenceAttribute(0x300a, 0x0210, sourceItems));
     plan->data.append(sequenceAttribute(0x300a, 0x0230, {applicationItem}));
     data->plan_data = plan;
 }
@@ -229,6 +255,44 @@ bool testPermanentLdrImport() {
            closeTo(data.seedTime[0], 4.0) && closeTo(data.treatmentTime, 0.0);
 }
 
+bool testInvalidSourceReferences() {
+    QVector<QByteArray> controlPoints = {
+        controlPoint("0\\0\\0", 0.0),
+        controlPoint("0\\0\\0", 1.0),
+    };
+
+    Data missingReference;
+    installPlan(
+        &missingReference,
+        "HDR",
+        "INTERSTITIAL",
+        {temporaryChannel(1.0, 1.0, controlPoints, true, 0)}
+    );
+    QString log;
+    if (missingReference.parsePlan(&log) != 312 || !missingReference.seedPos.isEmpty())
+        return false;
+
+    Data unknownReference;
+    installPlan(
+        &unknownReference,
+        "HDR",
+        "INTERSTITIAL",
+        {temporaryChannel(1.0, 1.0, controlPoints, true, 2)}
+    );
+    if (unknownReference.parsePlan(&log) != 312 || !unknownReference.seedPos.isEmpty())
+        return false;
+
+    Data multipleSources;
+    installPlan(
+        &multipleSources,
+        "HDR",
+        "INTERSTITIAL",
+        {temporaryChannel(1.0, 1.0, controlPoints)},
+        {1, 2}
+    );
+    return multipleSources.parsePlan(&log) == 311 && multipleSources.seedPos.isEmpty();
+}
+
 }
 
 int main(int argc, char *argv[]) {
@@ -240,6 +304,7 @@ int main(int argc, char *argv[]) {
         {"multi-channel HDR RTPLAN import", testMultiChannelHdrImport},
         {"missing final weight rollback", testMissingFinalWeightRollback},
         {"permanent LDR RTPLAN import", testPermanentLdrImport},
+        {"invalid source reference rejection", testInvalidSourceReferences},
     };
 
     for (const auto &test : tests) {
