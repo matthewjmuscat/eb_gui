@@ -14,7 +14,8 @@ enum Result {
     NonmonotonicCumulativeTimeWeight,
     NoActiveDwell,
     FinalCumulativeTimeWeightMismatch,
-    UnsupportedTransitTime
+    UnsupportedTransitTime,
+    InvalidControlPointOrientation
 };
 
 struct Channel {
@@ -23,12 +24,21 @@ struct Channel {
     bool hasFinalCumulativeTimeWeight = false;
     double finalCumulativeTimeWeight = 0.0;
     QVector<QVector3D> controlPointPositions;
+    QVector<QVector3D> controlPointOrientations;
     QVector<double> cumulativeTimeWeights;
 };
 
 Result appendTemporaryChannel(
     const Channel &channel,
     QVector<QVector3D> *seedPositions,
+    QVector<double> *seedTimes,
+    double *channelTreatmentTimeSeconds
+);
+
+Result appendTemporaryChannel(
+    const Channel &channel,
+    QVector<QVector3D> *seedPositions,
+    QVector<QVector3D> *seedOrientations,
     QVector<double> *seedTimes,
     double *channelTreatmentTimeSeconds
 );

@@ -174,6 +174,7 @@ public:
 
 	double treatmentTime, longestTime; // Total treatment time, longest seed time
 	QVector <QVector3D> seedPos; // Transformation file
+	QVector <QVector3D> seedOrientation; // Temporary-source direction vectors
 	QVector <double> seedTime; // All dwell times
 	
 public:

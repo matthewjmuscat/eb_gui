@@ -323,6 +323,11 @@ void sourceInterface::parsePlan() {
 				out << QString(":start transformation:\n");
 				out << QString("    translation = %1 %2 %3\n").arg(parent->data->seedPos[i].x())
 				.arg(parent->data->seedPos[i].y()).arg(parent->data->seedPos[i].z());
+				if (parent->data->treatmentTechnique != "PERMANENT")
+					out << QString("    rotation vector = %1 %2 %3\n")
+					.arg(parent->data->seedOrientation[i].x())
+					.arg(parent->data->seedOrientation[i].y())
+					.arg(parent->data->seedOrientation[i].z());
 				out << QString(":stop transformation:\n");
 			}
 			transFile.close();
@@ -436,6 +441,9 @@ void sourceInterface::parsePlan() {
 	else if (err == 312)
 		QMessageBox::warning(0, "DICOM error",
         tr("Each channel must reference the single declared source using Referenced Source Number (300C, 000E). DICOM parsing aborted."));
+	else if (err == 313)
+		QMessageBox::warning(0, "DICOM error",
+        tr("Temporary source Control Point Orientation (300A, 0412) is missing, invalid, or inconsistent within a dwell. DICOM parsing aborted."));
 	else if (err == 401)
 		QMessageBox::warning(0, "Seed count error",
         tr("Found some seed dwell times but number doesn't match the overall seed count.  DICOM parsing aborted."));

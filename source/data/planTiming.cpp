@@ -15,6 +15,28 @@ bool sameDwellPosition(const QVector3D &left, const QVector3D &right) {
     return (left-right).lengthSquared() <= positionToleranceCm*positionToleranceCm;
 }
 
+bool normalizedOrientation(const QVector3D &input, QVector3D *output) {
+    if (!std::isfinite(input.x()) || !std::isfinite(input.y()) ||
+        !std::isfinite(input.z()) || input.lengthSquared() <= 1.0e-12f) {
+        return false;
+    }
+    *output = input.normalized();
+    return true;
+}
+
+bool sameOrientation(const QVector3D &left, const QVector3D &right) {
+    const float orientationTolerance = 1.0e-5f;
+    return (left-right).lengthSquared() <= orientationTolerance*orientationTolerance;
+}
+
+PlanTiming::Result appendTemporaryChannelImpl(
+    const PlanTiming::Channel &channel,
+    QVector<QVector3D> *seedPositions,
+    QVector<QVector3D> *seedOrientations,
+    QVector<double> *seedTimes,
+    double *channelTreatmentTimeSeconds
+);
+
 }
 
 namespace PlanTiming {
@@ -25,10 +47,50 @@ Result appendTemporaryChannel(
     QVector<double> *seedTimes,
     double *channelTreatmentTimeSeconds
 ) {
+    return appendTemporaryChannelImpl(
+        channel, seedPositions, nullptr, seedTimes, channelTreatmentTimeSeconds
+    );
+}
+
+Result appendTemporaryChannel(
+    const Channel &channel,
+    QVector<QVector3D> *seedPositions,
+    QVector<QVector3D> *seedOrientations,
+    QVector<double> *seedTimes,
+    double *channelTreatmentTimeSeconds
+) {
+    return appendTemporaryChannelImpl(
+        channel, seedPositions, seedOrientations, seedTimes, channelTreatmentTimeSeconds
+    );
+}
+
+}
+
+namespace {
+
+PlanTiming::Result appendTemporaryChannelImpl(
+    const PlanTiming::Channel &channel,
+    QVector<QVector3D> *seedPositions,
+    QVector<QVector3D> *seedOrientations,
+    QVector<double> *seedTimes,
+    double *channelTreatmentTimeSeconds
+) {
+    using namespace PlanTiming;
     if (!seedPositions || !seedTimes || !channelTreatmentTimeSeconds ||
         channel.controlPointPositions.size() < 2 ||
         channel.controlPointPositions.size() != channel.cumulativeTimeWeights.size()) {
         return InvalidControlPointData;
+    }
+    QVector<QVector3D> normalizedOrientations;
+    if (seedOrientations) {
+        if (channel.controlPointOrientations.size() != channel.controlPointPositions.size())
+            return InvalidControlPointOrientation;
+        normalizedOrientations.resize(channel.controlPointOrientations.size());
+        for (int i = 0; i < channel.controlPointOrientations.size(); i++)
+            if (!normalizedOrientation(
+                    channel.controlPointOrientations[i], &normalizedOrientations[i]
+                ))
+                return InvalidControlPointOrientation;
     }
     if (!channel.hasChannelTotalTime || !std::isfinite(channel.channelTotalTime) ||
         channel.channelTotalTime <= 0.0) {
@@ -54,6 +116,7 @@ Result appendTemporaryChannel(
     }
 
     QVector<QVector3D> pendingPositions;
+    QVector<QVector3D> pendingOrientations;
     QVector<double> pendingTimes;
     double pendingTreatmentTime = 0.0;
     for (int i = 1; i < channel.controlPointPositions.size(); i++) {
@@ -70,10 +133,17 @@ Result appendTemporaryChannel(
         if (nearlyEqual(deltaWeight, 0.0)) {
             continue;
         }
+        if (seedOrientations && !sameOrientation(
+                normalizedOrientations[i], normalizedOrientations[i-1]
+            )) {
+            return InvalidControlPointOrientation;
+        }
 
         double dwellSeconds = channel.channelTotalTime*deltaWeight/
                               channel.finalCumulativeTimeWeight;
         pendingPositions.append(channel.controlPointPositions[i]);
+        if (seedOrientations)
+            pendingOrientations.append(normalizedOrientations[i]);
         pendingTimes.append(dwellSeconds);
         pendingTreatmentTime += dwellSeconds;
     }
@@ -86,10 +156,16 @@ Result appendTemporaryChannel(
     }
 
     seedPositions->append(pendingPositions);
+    if (seedOrientations)
+        seedOrientations->append(pendingOrientations);
     seedTimes->append(pendingTimes);
     *channelTreatmentTimeSeconds = pendingTreatmentTime;
     return Success;
 }
+
+}
+
+namespace PlanTiming {
 
 Result appendPermanentSeed(
     const QVector<QVector3D> &controlPointPositions,

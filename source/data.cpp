@@ -38,9 +38,11 @@
 */
 #include <QCollator>
 #include <QSet>
+#include <QtEndian>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <algorithm>  // min and max
+#include <cstring>
 
 struct stat info; // required struct for using sys/stat
 
@@ -116,6 +118,28 @@ bool parseDecimalAttribute(Attribute *attribute, int expectedValues, QVector<dou
 	return true;
 }
 
+bool parseFloatAttribute(
+	Attribute *attribute,
+	int expectedValues,
+	bool bigEndian,
+	QVector<double> *values
+) {
+	if (!attribute || !values || attribute->vl != static_cast<unsigned long>(4*expectedValues))
+		return false;
+	values->clear();
+	for (int i = 0; i < expectedValues; i++) {
+		quint32 bits = bigEndian ?
+			qFromBigEndian<quint32>(attribute->vf+4*i) :
+			qFromLittleEndian<quint32>(attribute->vf+4*i);
+		float component = 0.0f;
+		std::memcpy(&component, &bits, sizeof(component));
+		if (!std::isfinite(component))
+			return false;
+		values->append(component);
+	}
+	return true;
+}
+
 void deleteAttributes(QVector<Attribute *> *attributes) {
 	if (!attributes)
 		return;
@@ -133,6 +157,7 @@ int planTimingErrorCode(PlanTiming::Result result) {
 		case PlanTiming::NoActiveDwell: return 308;
 		case PlanTiming::FinalCumulativeTimeWeightMismatch: return 309;
 		case PlanTiming::UnsupportedTransitTime: return 310;
+		case PlanTiming::InvalidControlPointOrientation: return 313;
 		case PlanTiming::Success: return 0;
 	}
 	return 304;
@@ -1307,6 +1332,7 @@ int Data::parsePlan(QString* log) {
 	treatmentTechnique = "UNKNOWN";
 	isotopeName = "UNKNOWN";
 	seedPos.clear();
+	seedOrientation.clear();
 	seedTime.clear();
 	seedInfo = "UNKNOWN";
 	airKerma = halfLife = -1;
@@ -1521,6 +1547,7 @@ int Data::parsePlan(QString* log) {
 	treatmentTime = 0;
 	auto planImportError = [this](int error) {
 		seedPos.clear();
+		seedOrientation.clear();
 		seedTime.clear();
 		treatmentTime = 0;
 		return error;
@@ -1585,6 +1612,7 @@ int Data::parsePlan(QString* log) {
 							else if (att2->at(m)->tag[0] == 0x300A && att2->at(m)->tag[1] == 0x02D0) { // Control sequence
 								tempDwellTimes.clear();
 								tempPositions.clear();
+								QVector<QVector3D> tempOrientations;
 					
 								for (int k2 = 0; k2 < att2->at(m)->seq.items.size(); k2++) {
 									tempData3 = QByteArray((char*)att2->at(m)->seq.items[k2]->vf, att2->at(m)->seq.items[k2]->vl);
@@ -1628,10 +1656,18 @@ int Data::parsePlan(QString* log) {
 											if (timeOk)
 												tempDwellTimes.append(cumulativeTimeWeight);
 										}
+										else if (att3->at(n)->tag[0] == 0x300A && att3->at(n)->tag[1] == 0x0412) {
+											QVector<double> orientation;
+											if (parseFloatAttribute(att3->at(n), 3, plan_data->isBigEndian, &orientation))
+												tempOrientations.append(QVector3D(
+													orientation[0], orientation[1], orientation[2]
+												));
+										}
 									}
 									deleteAttributes(att3);
 								}
 								channel.controlPointPositions = tempPositions;
+								channel.controlPointOrientations = tempOrientations;
 								channel.cumulativeTimeWeights = tempDwellTimes;
 							}
 						}
@@ -1653,7 +1689,7 @@ int Data::parsePlan(QString* log) {
 						if (!timingError && treatmentTechnique != "PERMANENT") { // Measure total time for later calculation
 							double channelTreatmentTime = 0.0;
 							PlanTiming::Result result = PlanTiming::appendTemporaryChannel(
-								channel, &seedPos, &seedTime, &channelTreatmentTime
+								channel, &seedPos, &seedOrientation, &seedTime, &channelTreatmentTime
 							);
 							if (result != PlanTiming::Success)
 								timingError = planTimingErrorCode(result);
