@@ -1,6 +1,6 @@
 # Development Tracker
 
-Last reviewed: 2026-11-01
+Last reviewed: 2026-11-04
 
 This is the authoritative public-safe record of meaningful development in the
 `matthewjmuscat/eb_gui` fork. It records why work exists, where it is available,
@@ -366,14 +366,26 @@ remain separate changes; implementing one does not validate the others.
 - **Problem:** Missing or invalid source-model air-kerma calibration can retain a
   clinical scale numerically after warning of a fallback, yielding output that
   must not be interpreted as Gy.
-- **Branch/commit:** Proposed `fix/source-air-kerma-calibration-failure`; not
-  implemented.
-- **Fork/upstream:** Not pushed; upstream contribution planned if model-agnostic.
-- **CIHR/HDR/deployment:** Not integrated or deployed.
-- **Validation required:** Known calibration, missing metadata, zero/invalid
-  calibration, unit checks, and explicit generation failure.
-- **Next action:** Establish model-specific calibration evidence before absolute
-  HDR dose interpretation.
+- **Production commit:** `bfd6387b90069fce67f7a786e39d890034408252`.
+- **Internal test commit:** `5d3702a43aa001648be745906c9f8c11a20c7ff9`.
+- **Correction:** Air-kerma scaling now requires finite positive clinical
+  strength, exposure time, and source-model air-kerma per primary history. Input
+  generation aborts when the source geometry is unavailable or its calibration
+  is missing, malformed, nonfinite, zero, or negative. No calibration constant
+  or source-library file was added or modified.
+- **Fork/upstream:** Integrated locally on `hdr-lung/development`; push pending
+  completion of the approved repair sequence. Group as a general
+  source-normalization fail-fast contribution; no upstream branch or PR exists.
+- **CIHR/HDR/deployment:** Not synchronized to CIHR and not deployed.
+- **Validation:** A focused Qt Core test independently checks the scaling formula
+  and missing-file, missing-header, malformed, nonfinite, zero, and invalid-input
+  failures. It passed, and the full application compiled and linked. The existing
+  HDR dwell application-state target rebuilt with the new helper, but its
+  offscreen execution stopped at a pre-existing modal dialog and was terminated;
+  no pass is claimed for that execution.
+- **Next action:** Establish model-specific calibration provenance under VAL-001,
+  then repeat end-to-end generated-input and dose validation. Missing calibration
+  must remain a hard failure.
 
 ### HDR-005: Source orientation support
 
@@ -454,8 +466,13 @@ remain separate changes; implementing one does not validate the others.
   modification timestamps are not treatment delivery time.
 - **Integration/deployment:** No source selection or HDR binary is approved by
   this record.
-- **Next action:** Obtain authoritative model evidence and compare against an
-  independent reference.
+- **Current evidence:** The locally bundled Flexisource geometry searched during
+  HDR-004 development contains no `air kerma:` calibration header. HDR-004 does
+  not insert the candidate value `1.16267E-13` or otherwise alter the model.
+- **Next action:** Establish why the local model differs from the authoritative
+  CLRP version and verify that geometry, spectrum, calibration method, units, and
+  source version are mutually consistent before adding qualified metadata or
+  interpreting absolute dose.
 
 ### VAL-002: HDR end-to-end scientific validation
 
