@@ -14,6 +14,7 @@ HEADERS += ../source/data.h \
            ../source/data/ctGeometry.h \
            ../source/data/DICOM.h \
            ../source/data/planTiming.h \
+           ../source/data/runMode.h \
            ../source/data/sourceCalibration.h \
            ../source/data/simulationResult.h \
            ../source/data/dose.h \
@@ -33,6 +34,7 @@ SOURCES += hdr_dwell_state_test.cpp \
            ../source/data/database.cpp \
            ../source/data/DICOM.cpp \
            ../source/data/planTiming.cpp \
+           ../source/data/runMode.cpp \
            ../source/data/sourceCalibration.cpp \
            ../source/data/simulationResult.cpp \
            ../source/data/dose.cpp \
