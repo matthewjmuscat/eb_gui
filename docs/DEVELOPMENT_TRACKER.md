@@ -382,13 +382,23 @@ remain separate changes; implementing one does not validate the others.
 - **Type:** Bug fix and scientific prerequisite.
 - **Problem:** A stepping HDR source can be generated without enforcing
   superposition mode, leaving all dwell geometries active together.
-- **Branch/commit:** Proposed `fix/hdr-stepping-source-run-mode`; not implemented.
-- **Fork/upstream:** Not pushed; upstream contribution planned if the correction
-  remains general-purpose.
-- **CIHR/HDR/deployment:** Not integrated or deployed.
-- **Validation required:** HDR mode enforcement without forcing TG-43 water, plus
-  unchanged permanent-LDR behavior.
-- **Next action:** Implement independently after timing and loader review.
+- **Production commit:** `168bc2e9c7cd5f2263daf76139aa1e1f0e0c61f7`.
+- **Internal test commit:** `4b4478e42b7dcf00f998eeb63d30688c66d61e23`.
+- **Correction:** Temporary treatments always generate `superposition` run mode,
+  independently of TG-43 water selection. Permanent treatments preserve the
+  selected heterogeneous mode, while TG-43 continues to force superposition.
+- **Fork/upstream:** Integrated locally on `hdr-lung/development`; push pending
+  completion of the current safeguard sequence. Plan an HDR run-mode production
+  contribution separate from calibration and lifecycle handling.
+- **CIHR/HDR/deployment:** Not synchronized to CIHR and not deployed.
+- **Validation:** Focused temporary, TG-43, and permanent-LDR mode cases passed;
+  the complete Qt application compiled and linked.
+- **Batching limitation:** The input writer enforces this invariant when a run is
+  correctly configured as temporary, but the existing manifest generator still
+  assumes the CIHR permanent/prostate workflow and does not establish HDR dwell
+  state. HDR-compatible CLI batch generation remains separate work.
+- **Next action:** Preserve this invariant when defining an HDR manifest contract;
+  do not reuse the existing CIHR batch assumptions unchanged.
 
 ### HDR-004: Air-kerma calibration hard failure
 
