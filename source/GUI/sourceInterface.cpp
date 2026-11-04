@@ -430,6 +430,12 @@ void sourceInterface::parsePlan() {
 	else if (err == 310)
 		QMessageBox::warning(0, "DICOM error",
         tr("A nonzero source-transit interval is not supported. DICOM parsing aborted."));
+	else if (err == 311)
+		QMessageBox::warning(0, "DICOM error",
+        tr("Exactly one valid Source Number (300A, 0212) is required. DICOM parsing aborted."));
+	else if (err == 312)
+		QMessageBox::warning(0, "DICOM error",
+        tr("Each channel must reference the single declared source using Referenced Source Number (300C, 000E). DICOM parsing aborted."));
 	else if (err == 401)
 		QMessageBox::warning(0, "Seed count error",
         tr("Found some seed dwell times but number doesn't match the overall seed count.  DICOM parsing aborted."));

@@ -37,6 +37,7 @@
 ################################################################################
 */
 #include <QCollator>
+#include <QSet>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <algorithm>  // min and max
@@ -1298,6 +1299,8 @@ int Data::parsePlan(QString* log) {
 	QStringList pointData2;
 	QString treatDate = "", kermaDate = "";
 	QString treatTime = "", kermaTime = "";
+	QSet<int> sourceNumbers;
+	int sourceItemCount = 0;
 	
 	// Reset plan data variables to default to know what worked
 	treatmentType = "UNKNOWN";
@@ -1371,6 +1374,7 @@ int Data::parsePlan(QString* log) {
 	tempAtt = plan_data->getEntry(0x300A, 0x0210); // Get att closest to (300A,0210)
 	if (tempAtt->tag[0] == 0x300A && tempAtt->tag[1] == 0x0210) {
 		for (int k = 0; k < tempAtt->seq.items.size(); k++) {
+			sourceItemCount++;
 			tempData = QByteArray((char *)tempAtt->seq.items[k]->vf,tempAtt->seq.items[k]->vl);
 			QDataStream dataStream(tempData);
 
@@ -1386,8 +1390,12 @@ int Data::parsePlan(QString* log) {
 			QString tempInf = ""; // Get seed data
 			QString tempD   = ""; // Get date data
 			QString tempT   = ""; // Get time data
+			QString tempN   = ""; // Get source number
 			for (int l = 0; l < att->size(); l++) {
-				if (att->at(l)->tag[0] == 0x300A && att->at(l)->tag[1] == 0x022A)
+				if (att->at(l)->tag[0] == 0x300A && att->at(l)->tag[1] == 0x0212)
+					for (unsigned int s = 0; s < att->at(l)->vl; s++)
+						tempN.append(att->at(l)->vf[s]);
+				else if (att->at(l)->tag[0] == 0x300A && att->at(l)->tag[1] == 0x022A)
 					for (unsigned int s = 0; s < att->at(l)->vl; s++)
 						tempS.append(att->at(l)->vf[s]);
 				else if (att->at(l)->tag[0] == 0x300A && att->at(l)->tag[1] == 0x0228)
@@ -1435,10 +1443,20 @@ int Data::parsePlan(QString* log) {
 				kermaDate = tempD.trimmed();
 			if (kermaTime == "" && tempT != "")
 				kermaTime = tempT.trimmed();
+			bool sourceNumberOk = false;
+			int sourceNumber = tempN.trimmed().toInt(&sourceNumberOk);
+			if (!sourceNumberOk || sourceNumber <= 0) {
+				deleteAttributes(att);
+				return 311;
+			}
+			sourceNumbers.insert(sourceNumber);
 
 			deleteAttributes(att);
 		}
 	}
+	if (sourceItemCount != 1 || sourceNumbers.size() != 1)
+		return 311;
+	int declaredSourceNumber = *sourceNumbers.constBegin();
 	
 	// Check to see if all the (needed) fields were found
 	//if (isotopeName == "UNKNOWN") {
@@ -1535,13 +1553,24 @@ int Data::parsePlan(QString* log) {
 							return planImportError(302);
 						}
 						PlanTiming::Channel channel;
+						int referencedSourceCount = 0;
+						int referencedSourceNumber = 0;
+						bool referencedSourceValid = false;
 						
 						// Here, each seed will have its own subsequence with tag (300A,02D0)
 						// Average all the control points 3D positions and get cumulative time
 						// and fill dwell time and position as we go
 						
 						for (int m = 0; m < att2->size(); m++) {
-							if (att2->at(m)->tag[0] == 0x300A && att2->at(m)->tag[1] == 0x0286) {
+							if (att2->at(m)->tag[0] == 0x300C && att2->at(m)->tag[1] == 0x000E) {
+								QString value;
+								for (unsigned int s = 0; s < att2->at(m)->vl; s++)
+									value.append(att2->at(m)->vf[s]);
+								referencedSourceCount++;
+								referencedSourceNumber = value.trimmed().toInt(&referencedSourceValid);
+								referencedSourceValid = referencedSourceValid && referencedSourceNumber > 0;
+							}
+							else if (att2->at(m)->tag[0] == 0x300A && att2->at(m)->tag[1] == 0x0286) {
 								QString value;
 								for (unsigned int s = 0; s < att2->at(m)->vl; s++)
 									value.append(att2->at(m)->vf[s]);
@@ -1608,8 +1637,11 @@ int Data::parsePlan(QString* log) {
 						}
 
 						int timingError = 0;
+						if (referencedSourceCount != 1 || !referencedSourceValid ||
+							referencedSourceNumber != declaredSourceNumber)
+							timingError = 312;
 						// Convert all the control point data into a seed and a weight
-						if (treatmentTechnique == "PERMANENT") {
+						if (!timingError && treatmentTechnique == "PERMANENT") {
 							PlanTiming::Result result = PlanTiming::appendPermanentSeed(
 								channel.controlPointPositions, channel.cumulativeTimeWeights,
 								&seedPos, &seedTime
@@ -1618,7 +1650,7 @@ int Data::parsePlan(QString* log) {
 								timingError = 304;
 						}
 						
-						if (treatmentTechnique != "PERMANENT") { // Measure total time for later calculation
+						if (!timingError && treatmentTechnique != "PERMANENT") { // Measure total time for later calculation
 							double channelTreatmentTime = 0.0;
 							PlanTiming::Result result = PlanTiming::appendTemporaryChannel(
 								channel, &seedPos, &seedTime, &channelTreatmentTime
