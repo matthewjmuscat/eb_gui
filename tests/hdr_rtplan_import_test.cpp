@@ -34,6 +34,21 @@ QByteArray textElement(quint16 group, quint16 element, const char *vr, QString t
     return bytes;
 }
 
+QByteArray orientationElement(const QVector3D &orientation) {
+    QByteArray bytes;
+    appendU16(&bytes, 0x300a);
+    appendU16(&bytes, 0x0412);
+    bytes.append("FL", 2);
+    appendU16(&bytes, 12);
+    const float components[] = {orientation.x(), orientation.y(), orientation.z()};
+    for (float component : components) {
+        quint32 bits = 0;
+        std::memcpy(&bits, &component, sizeof(bits));
+        appendU32(&bytes, bits);
+    }
+    return bytes;
+}
+
 QByteArray sequenceElement(
     quint16 group,
     quint16 element,
@@ -86,14 +101,22 @@ Attribute *sequenceAttribute(
     return attribute;
 }
 
-QByteArray controlPoint(QString positionMm, double cumulativeWeight) {
-    return textElement(0x300a, 0x02d4, "DS", positionMm) +
+QByteArray controlPoint(
+    QString positionMm,
+    double cumulativeWeight,
+    QVector3D orientation = QVector3D(0, 0, 1),
+    bool includeOrientation = true
+) {
+    QByteArray item = textElement(0x300a, 0x02d4, "DS", positionMm)+
            textElement(
                0x300a,
                0x02d6,
                "DS",
                QString::number(cumulativeWeight, 'g', 16)
            );
+    if (includeOrientation)
+        item += orientationElement(orientation);
+    return item;
 }
 
 QByteArray temporaryChannel(
@@ -187,18 +210,18 @@ bool testMultiChannelHdrImport() {
         firstChannelTime,
         firstFinalWeight,
         {
-            controlPoint("10\\20\\30", 0.0),
-            controlPoint("10\\20\\30", firstWeight),
-            controlPoint("40\\50\\60", firstWeight),
-            controlPoint("40\\50\\60", firstFinalWeight),
+            controlPoint("10\\20\\30", 0.0, QVector3D(1, 0, 0)),
+            controlPoint("10\\20\\30", firstWeight, QVector3D(1, 0, 0)),
+            controlPoint("40\\50\\60", firstWeight, QVector3D(0, 2, 0)),
+            controlPoint("40\\50\\60", firstFinalWeight, QVector3D(0, 2, 0)),
         }
     );
     QByteArray secondChannel = temporaryChannel(
         thirdDwell,
         7.0,
         {
-            controlPoint("-10\\-20\\-30", 0.0),
-            controlPoint("-10\\-20\\-30", 7.0),
+            controlPoint("-10\\-20\\-30", 0.0, QVector3D(0, 0, -3)),
+            controlPoint("-10\\-20\\-30", 7.0, QVector3D(0, 0, -3)),
         }
     );
 
@@ -208,9 +231,13 @@ bool testMultiChannelHdrImport() {
     int result = data.parsePlan(&log);
     const double expectedTotal = firstDwell+secondDwell+thirdDwell;
     return result == 0 && data.seedPos.size() == 3 && data.seedTime.size() == 3 &&
+            data.seedOrientation.size() == 3 &&
            data.seedPos[0] == QVector3D(1, 2, 3) &&
            data.seedPos[1] == QVector3D(4, 5, 6) &&
            data.seedPos[2] == QVector3D(-1, -2, -3) &&
+           data.seedOrientation[0] == QVector3D(1, 0, 0) &&
+           data.seedOrientation[1] == QVector3D(0, 1, 0) &&
+           data.seedOrientation[2] == QVector3D(0, 0, -1) &&
            closeTo(data.seedTime[0], firstDwell) &&
            closeTo(data.seedTime[1], secondDwell) &&
            closeTo(data.seedTime[2], thirdDwell) &&
@@ -239,8 +266,8 @@ bool testMissingFinalWeightRollback() {
 bool testPermanentLdrImport() {
     QByteArray channel = permanentChannel(
         {
-            controlPoint("0\\0\\0", 1.0),
-            controlPoint("10\\0\\0", 3.0),
+            controlPoint("0\\0\\0", 1.0, QVector3D(), false),
+            controlPoint("10\\0\\0", 3.0, QVector3D(), false),
         }
     );
 
@@ -249,10 +276,52 @@ bool testPermanentLdrImport() {
     QString log;
     int result = data.parsePlan(&log);
     return result == 0 && data.seedPos.size() == 1 && data.seedTime.size() == 1 &&
+            data.seedOrientation.isEmpty() &&
            closeTo(data.seedPos[0].x(), 0.75) &&
            closeTo(data.seedPos[0].y(), 0.0) &&
            closeTo(data.seedPos[0].z(), 0.0) &&
            closeTo(data.seedTime[0], 4.0) && closeTo(data.treatmentTime, 0.0);
+}
+
+bool testInvalidTemporaryOrientation() {
+    Data missingOrientation;
+    installPlan(
+        &missingOrientation,
+        "HDR",
+        "INTERSTITIAL",
+        {temporaryChannel(
+            1.0,
+            1.0,
+            {
+                controlPoint("0\\0\\0", 0.0, QVector3D(), false),
+                controlPoint("0\\0\\0", 1.0, QVector3D(), false),
+            }
+        )}
+    );
+    QString log;
+    if (missingOrientation.parsePlan(&log) != 313 ||
+        !missingOrientation.seedPos.isEmpty() ||
+        !missingOrientation.seedOrientation.isEmpty()) {
+        return false;
+    }
+
+    Data inconsistentOrientation;
+    installPlan(
+        &inconsistentOrientation,
+        "HDR",
+        "INTERSTITIAL",
+        {temporaryChannel(
+            1.0,
+            1.0,
+            {
+                controlPoint("0\\0\\0", 0.0, QVector3D(1, 0, 0)),
+                controlPoint("0\\0\\0", 1.0, QVector3D(0, 1, 0)),
+            }
+        )}
+    );
+    return inconsistentOrientation.parsePlan(&log) == 313 &&
+           inconsistentOrientation.seedPos.isEmpty() &&
+           inconsistentOrientation.seedOrientation.isEmpty();
 }
 
 bool testInvalidSourceReferences() {
@@ -305,6 +374,7 @@ int main(int argc, char *argv[]) {
         {"missing final weight rollback", testMissingFinalWeightRollback},
         {"permanent LDR RTPLAN import", testPermanentLdrImport},
         {"invalid source reference rejection", testInvalidSourceReferences},
+        {"invalid temporary orientation rejection", testInvalidTemporaryOrientation},
     };
 
     for (const auto &test : tests) {
