@@ -446,12 +446,22 @@ remain separate changes; implementing one does not validate the others.
 - **Problem:** Plan import uses one global source while channel-level source
   references are not enforced. Unsupported multi-source plans could therefore be
   interpreted silently.
-- **Branch/commit:** Not assigned; not implemented.
-- **Fork/upstream:** Not pushed; upstream status under consideration.
-- **CIHR/HDR/deployment:** Not integrated or deployed.
-- **Validation required:** Single-source acceptance and explicit rejection of
-  unsupported missing, unknown, or multiple references.
-- **Next action:** Add a fail-fast preflight before general multi-source support.
+- **Production commit:** `35f32f84e6db7169805dd3436d641c89b9d0c676`.
+- **Internal test commit:** `b4bdbdc0458dcc11048006aa282ef233c67efd31`.
+- **Correction:** RTPLAN import now requires exactly one valid positive Source
+  Number and exactly one matching Referenced Source Number in every channel.
+  Missing, malformed, unknown, duplicate-reference, and multi-source states fail
+  before transformations are committed.
+- **Fork/upstream:** Integrated locally on `hdr-lung/development`; push pending
+  completion of the current safeguard sequence. Plan an HDR RTPLAN source
+  validation contribution; multi-source support is not implied.
+- **CIHR/HDR/deployment:** Not synchronized to CIHR and not deployed.
+- **Validation:** Synthetic multi-channel HDR and permanent-LDR imports passed
+  with valid references. Missing channel references, unknown references, and
+  multiple declared sources were rejected with atomic rollback. The complete Qt
+  application compiled and linked.
+- **Next action:** Preserve explicit single-source failure behavior until a
+  separately designed multi-source model is implemented and validated.
 
 ### HDR-007: CT image-plane geometry preflight
 
