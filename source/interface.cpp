@@ -43,6 +43,7 @@
 #include "GUI/ebInterface.h"
 #include "GUI/doseInterface.h"
 #include "GUI/appInterface.h"
+#include "data/sourceCalibration.h"
 
 namespace {
 	struct CanonicalToken {
@@ -1575,57 +1576,29 @@ int Interface::populateEgsinp() {
 	
 	double tempScale = sourceScaleEdit->text().toDouble(); // Flat scaling or Gy*cm^2/h
 	if (!sourceScaleBox->currentText().compare("Air kerma strength")) {
-		double airKermaSeed = 0; // Gy*cm^2/h
-		
-		QString fileName = egsinp->sourceGeomFile;		
-		QFile skFile (fileName);
-		if (skFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-			QTextStream in (&skFile);
-			QString line;
-			while (!in.atEnd()) {
-				line = in.readLine();
-				if (line.contains("#") && line.contains("air kerma:")) {
-					line = line.split(":").last().trimmed();
-					break;
-				}
-			}
-			airKermaSeed = line.toDouble();
-			
-			if (airKermaSeed) { // if it worked
-				tempScale /= airKermaSeed; // tempScale will now have the ratio of experiment/MC per hour with units of history/hour
-			}
-			else // if none was found
-				QMessageBox::warning(0, "air kerma error",
-				tr("Failed to find air kerma in source geom file, scaling dose by 1 instead."));
-			
-			// Assign half-life based on seed folder
-			double half_life = 0;
-			if (s.contains("Cs131"))
-				half_life = 9.7; // Pre-set parameter
-			else if (s.contains("Ir192"))
-				half_life = 73.83; // Pre-set parameter
-			else if (s.contains("Pd103"))
-				half_life = 16.99; // Pre-set parameter
-			else { // Assume I-125 otherwise
-				half_life = 59.49; // Pre-set parameter
-			}
+		double half_life = 0;
+		if (s.contains("Cs131"))
+			half_life = 9.7; // Pre-set parameter
+		else if (s.contains("Ir192"))
+			half_life = 73.83; // Pre-set parameter
+		else if (s.contains("Pd103"))
+			half_life = 16.99; // Pre-set parameter
+		else
+			half_life = 59.49; // Pre-set parameter
 
-			// Note, the tempScale in not permanent needs a scaling factor of the highest seed weight
-
-			double tau = (half_life/0.6931471805)*24.0; // go from half-life in days to mean lifetime in hours
-			if (!sourcePermTime->isChecked())
-				tempScale *= dwellTimeScaleHours(); //HDR scaling factor
-			else if (sourcePermTime->isChecked())
-				tempScale *= tau; //LDR scaling factor
-			
-			skFile.close();
+		double tau = (half_life/0.6931471805)*24.0; // go from half-life in days to mean lifetime in hours
+		double exposureHours = sourcePermTime->isChecked() ? tau : dwellTimeScaleHours();
+		QString calibrationError;
+		if (!SourceCalibration::calculateDoseScale(
+				egsinp->sourceGeomFile,
+				tempScale,
+				exposureHours,
+				&tempScale,
+				&calibrationError)) {
+			QMessageBox::warning(0, "air kerma calibration error",
+				calibrationError+tr(" Aborting input generation."));
+			return 105;
 		}
-		else {
-			QMessageBox::warning(0, "air kerma error",
-			tr("Failed to open geom file for source, scaling dose by 1 instead."));
-			tempScale = 1;
-		}
-		skFile.close();
 	}
 	else if (!sourceScaleBox->currentText().compare("Dose scaling factor")) {
 		// do nothing
