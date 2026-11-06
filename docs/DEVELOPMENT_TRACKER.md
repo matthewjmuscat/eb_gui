@@ -1,6 +1,6 @@
 # Development Tracker
 
-Last reviewed: 2026-11-04
+Last reviewed: 2026-11-05
 
 This is the authoritative public-safe record of meaningful development in the
 `matthewjmuscat/eb_gui` fork. It records why work exists, where it is available,
@@ -172,9 +172,9 @@ is equivalent.
   files copy successfully; copy failure rolls back newly copied destinations and
   retains source output. The obsolete one-argument process-finished connection
   was removed.
-- **Fork/upstream:** Integrated locally on `hdr-lung/development`; push pending
-  completion of the approved repair sequence. Plan a separate general simulation
-  lifecycle PR; do not combine it with HDR calibration or EGSnrc infrastructure.
+- **Fork/upstream:** Integrated and pushed on `hdr-lung/development`; no upstream
+  branch or PR exists. Plan a separate general simulation lifecycle PR; do not
+  combine it with HDR calibration or EGSnrc infrastructure.
 - **CIHR/HDR/deployment:** Not synchronized to CIHR and not deployed.
 - **Validation:** Focused tests passed for nonzero normal exit, crash exit, zero
   exit without output, empty output, stale-output discovery, and zero exit with
@@ -387,9 +387,9 @@ remain separate changes; implementing one does not validate the others.
 - **Correction:** Temporary treatments always generate `superposition` run mode,
   independently of TG-43 water selection. Permanent treatments preserve the
   selected heterogeneous mode, while TG-43 continues to force superposition.
-- **Fork/upstream:** Integrated locally on `hdr-lung/development`; push pending
-  completion of the current safeguard sequence. Plan an HDR run-mode production
-  contribution separate from calibration and lifecycle handling.
+- **Fork/upstream:** Integrated and pushed on `hdr-lung/development`; no upstream
+  branch or PR exists. Plan an HDR run-mode production contribution separate from
+  calibration and lifecycle handling.
 - **CIHR/HDR/deployment:** Not synchronized to CIHR and not deployed.
 - **Validation:** Focused temporary, TG-43, and permanent-LDR mode cases passed;
   the complete Qt application compiled and linked.
@@ -413,9 +413,9 @@ remain separate changes; implementing one does not validate the others.
   generation aborts when the source geometry is unavailable or its calibration
   is missing, malformed, nonfinite, zero, or negative. No calibration constant
   or source-library file was added or modified.
-- **Fork/upstream:** Integrated locally on `hdr-lung/development`; push pending
-  completion of the approved repair sequence. Group as a general
-  source-normalization fail-fast contribution; no upstream branch or PR exists.
+- **Fork/upstream:** Integrated and pushed on `hdr-lung/development`; no upstream
+  branch or PR exists. Group as a general source-normalization fail-fast
+  contribution.
 - **CIHR/HDR/deployment:** Not synchronized to CIHR and not deployed.
 - **Validation:** A focused Qt Core test independently checks the scaling formula
   and missing-file, missing-header, malformed, nonfinite, zero, and invalid-input
@@ -440,21 +440,37 @@ remain separate changes; implementing one does not validate the others.
   vector per dwell, and writes it as an EGSnrc `rotation vector`. The DICOM vector
   is the source long axis in insertion direction in patient coordinates; the
   EGSnrc transformation maps the model's local positive z-axis to that vector.
-- **Failure behavior:** Missing, malformed, zero, nonfinite, or inconsistent
-  temporary-source orientation aborts the import with atomic rollback. Permanent
-  LDR remains translation-only to preserve established behavior pending a
-  separately justified LDR orientation change.
-- **Fork/upstream:** Integrated locally on `hdr-lung/development`; push pending
-  completion of the current safeguard sequence. Plan an HDR RTPLAN orientation
-  contribution separate from source calibration and general lifecycle handling.
+- **Cohort preflight:** All ten reviewed anonymized HDR plans omit optional
+  Control Point Orientation. They are single-channel STEPWISE plans with complete,
+  monotonic Control Point Relative Position and Control Point 3D Position pairs.
+  Their ordered dwell centerlines are nondegenerate, but local curvature is
+  sufficient that a single global direction is not defensible.
+- **Current failure behavior:** Missing, malformed, zero, nonfinite, or
+  inconsistent temporary-source orientation aborts the import with atomic
+  rollback. Permanent LDR remains translation-only to preserve established
+  behavior pending a separately justified LDR orientation change.
+- **Fork/upstream:** Integrated and pushed on `hdr-lung/development`; no upstream
+  branch or PR exists. Plan an HDR RTPLAN orientation contribution separate from
+  source calibration and general lifecycle handling.
 - **CIHR/HDR/deployment:** Not synchronized to CIHR and not deployed.
 - **Validation:** Synthetic signed and non-unit vectors were normalized and
   retained in dwell order. Missing and inconsistent orientations were rejected;
   five RTPLAN import groups and eight timing groups passed, including permanent
   LDR compatibility. The complete Qt application compiled and linked.
-- **Next action:** Include orientation lines in generated-input review and compare
-  anisotropy-sensitive dose against an independent source-model reference during
-  end-to-end validation.
+- **Proposed surgical refinement:** Keep explicit DICOM orientation as the
+  preferred path. When it is absent, show a blocking GUI warning that explains
+  the missing anisotropy information and offers: abort (default); supply an
+  externally established direction; or explicitly approve a local catheter-
+  tangent approximation when the channel has complete monotonic relative
+  positions and at least two distinct dwell centers. For that approximation,
+  use one-sided endpoint tangents and centered interior tangents, with sign from
+  larger toward smaller relative position to represent insertion direction.
+  Record the assumption in the transformation header/log and generated-input
+  provenance. Hard-fail degenerate, incomplete, nonmonotonic, or unsupported
+  channel geometry. Never infer or apply a fallback silently.
+- **Next action:** Review the proposed user-choice contract before changing code,
+  then include orientation provenance in generated-input review and compare
+  anisotropy-sensitive dose against an independent source-model reference.
 
 ### HDR-006: Referenced-source validation
 
@@ -464,34 +480,63 @@ remain separate changes; implementing one does not validate the others.
   interpreted silently.
 - **Production commit:** `35f32f84e6db7169805dd3436d641c89b9d0c676`.
 - **Internal test commit:** `b4bdbdc0458dcc11048006aa282ef233c67efd31`.
-- **Correction:** RTPLAN import now requires exactly one valid positive Source
-  Number and exactly one matching Referenced Source Number in every channel.
-  Missing, malformed, unknown, duplicate-reference, and multi-source states fail
-  before transformations are committed.
-- **Fork/upstream:** Integrated locally on `hdr-lung/development`; push pending
-  completion of the current safeguard sequence. Plan an HDR RTPLAN source
-  validation contribution; multi-source support is not implied.
+- **Implemented correction:** RTPLAN import currently requires exactly one
+  positive Source Number and exactly one matching positive Referenced Source
+  Number in every channel. Missing, malformed, unknown, duplicate-reference, and
+  multi-source states fail before transformations are committed.
+- **Cohort preflight defect:** All ten reviewed plans use Source Number zero and
+  matching Referenced Source Number zero. DICOM requires a unique integer
+  identifier but does not require positivity. The current implementation's
+  positive-only check rejects every plan with status 311 before orientation is
+  evaluated; therefore this safeguard is not release-ready.
+- **Fork/upstream:** Integrated and pushed on `hdr-lung/development`; no upstream
+  branch or PR exists. Plan an HDR RTPLAN source validation contribution;
+  multi-source support is not implied.
 - **CIHR/HDR/deployment:** Not synchronized to CIHR and not deployed.
 - **Validation:** Synthetic multi-channel HDR and permanent-LDR imports passed
   with valid references. Missing channel references, unknown references, and
   multiple declared sources were rejected with atomic rollback. The complete Qt
   application compiled and linked.
-- **Next action:** Preserve explicit single-source failure behavior until a
-  separately designed multi-source model is implemented and validated.
+- **Next action:** Surgically accept any valid integer Source Number, including
+  zero, while retaining exact reference matching and single-source enforcement.
+  Add focused zero-valued and mismatched-reference tests. Preserve explicit
+  multi-source failure until separately designed and validated.
 
 ### HDR-007: CT image-plane geometry preflight
 
-- **Type:** Scientific prerequisite.
-- **Problem:** Current CT loading is reliable only under restricted standard-axis,
-  matrix, ordering, and spacing assumptions; unsupported geometry is not fully
-  rejected.
-- **Branch/commit:** Proposed `fix/ct-image-plane-preflight`; not implemented.
-- **Fork/upstream:** Not pushed; upstream status under consideration.
-- **CIHR/HDR/deployment:** Not integrated or deployed.
-- **Validation required:** Synthetic standard, oblique, rectangular, reversed,
-  irregular-spacing, and frame-mismatch series.
-- **Next action:** Add explicit rejection first; generalize geometry only when
-  requirements and references justify it.
+- **Type:** General-purpose geometry correction and scientific prerequisite.
+- **Problem:** CT loading ignored Image Orientation Patient, confused DICOM
+  rows/columns with patient x/y, and relied on Slice Thickness for z boundaries.
+  Reversed, swapped, rectangular, descending, or empty-thickness series could be
+  mapped incorrectly.
+- **Production commits:** Orientation-aware mapping
+  `226b65b706a0b3b1dd13547accac688ec35588fb`; IPP-derived z boundaries
+  `6ef533defbf8ba0a55b4a3a5cf00acaf87e91cba`.
+- **Internal tests:** Synthetic geometry matrix
+  `4ad1db24f23a3b800c63fa74f4ab9ae728e3dcbe`; cumulative test linkage
+  `55e747fe53078b10a230fdc5dc98f06427cbc759`.
+- **Correction:** Decode pixels in DICOM row-major order, map them through the
+  DICOM affine into increasing patient x/y axes, sort slices by physical IPP z,
+  derive multi-slice boundaries from center midpoints, support irregular spacing,
+  and explicitly reject oblique, duplicate, malformed, or inconsistent geometry.
+  Single-slice series still require finite positive Slice Thickness.
+- **Fork/upstream:** Integrated and pushed on `hdr-lung/development`; no upstream
+  branch or PR exists. Plan a production-only general CT geometry contribution.
+- **CIHR/HDR/deployment:** Not synchronized to CIHR and not deployed.
+- **Validation:** Eleven synthetic groups passed normally and under sanitizers,
+  including conventional, reversed, swapped, rotated, rectangular, descending,
+  irregular-z, empty-thickness, density/media, mask, and source/MAR checks. The
+  ten reviewed HDR CT series each contain 512 consistent axis-aligned slices with
+  complete geometry attributes, no duplicate centers, and uniform spacing; all
+  are within the implemented acceptance envelope. Their CT, RTSTRUCT, and HDR
+  RTPLAN Frame of Reference UIDs agree.
+- **Remaining gaps:** The mapper intentionally rejects rather than supports
+  oblique/gantry-tilted data. Cross-object Frame of Reference agreement was
+  verified in this cohort but is not yet enforced by the GUI. Enhanced/multiframe
+  CT remains outside the validated classic single-frame-series path.
+- **Next action:** Reclassify HDR-007 as implemented and cohort-compatible. Add a
+  small cross-object Frame of Reference preflight before research use; do not
+  broaden to oblique or enhanced CT without separate requirements and tests.
 
 ### HDR-008: RT Plan timestamp semantics
 
@@ -524,7 +569,8 @@ remain separate changes; implementing one does not validate the others.
 ### VAL-001: Flexisource model and calibration qualification
 
 - **Type:** Validation.
-- **Status:** Required; not complete.
+- **Status:** File-level model qualification complete; clinical model identity
+  and absolute-dose validation remain incomplete.
 - **Purpose:** Establish the clinical source model, geometry, spectrum, and
   source-model-specific air-kerma strength per primary history before absolute
   HDR scaling. Establish the source-strength reference time and an approved
@@ -532,13 +578,32 @@ remain separate changes; implementing one does not validate the others.
   modification timestamps are not treatment delivery time.
 - **Integration/deployment:** No source selection or HDR binary is approved by
   this record.
-- **Current evidence:** The locally bundled Flexisource geometry searched during
-  HDR-004 development contains no `air kerma:` calibration header. HDR-004 does
-  not insert the candidate value `1.16267E-13` or otherwise alter the model.
-- **Next action:** Establish why the local model differs from the authoritative
-  CLRP version and verify that geometry, spectrum, calibration method, units, and
-  source version are mutually consistent before adding qualified metadata or
-  interpreting absolute dose.
+- **Authoritative evidence:** Upstream egs_brachy commit
+  `851ae045e82eb61c595a13cf9ffab3e2fe2e5b66` added the audited Flexisource
+  `air kerma: 1.16267E-13` header. Comment-free normalized geometry tokens are
+  identical before and after that commit, and no later upstream commit changes
+  Flexisource. The installed geometry is byte-identical to the pre-header file;
+  its source shape, boundary shape, and Ir-192 spectrum are byte-identical to the
+  audited/current upstream files. The installed material definitions are
+  semantically identical to the pinned source; current upstream only adds
+  unrelated `AIR_PHANT`, while Flexisource media remain unchanged.
+- **Interpretation:** The published header applies to the installed Flexisource
+  file set under the same transport/calibration convention; it is not an
+  invented local constant. However, all ten reviewed plans omit Source Model ID,
+  manufacturer, description, and serial provenance. They establish only an
+  Ir-192 line source, so DICOM alone does not establish that Flexisource was the
+  clinical model. Current GUI source matching correctly cannot resolve a unique
+  model from isotope-only metadata.
+- **Update procedure:** Do not edit the shared installed library in place. Stage
+  the exact authoritative Flexisource geometry from `851ae045` (or current main,
+  which is identical) in a versioned isolated HDR egs_brachy library; verify the
+  normalized geometry and dependency hashes; record commit and file hashes; and
+  point only an approved HDR validation binary/runtime at that library. The
+  header-only update does not require transport recompilation. Preserve the
+  protected CIHR library/runtime unchanged.
+- **Next action:** Obtain an authoritative external clinical record confirming
+  the source model, then stage the audited header in isolation and perform
+  generated-input dimensional checks plus independent absolute-dose validation.
 
 ### VAL-002: HDR end-to-end scientific validation
 
@@ -571,6 +636,57 @@ remain separate changes; implementing one does not validate the others.
 - **Integration/deployment:** No additional defects are claimed by this entry.
 - **Next action:** Begin only under a separately approved scope; retain synthetic
   data and scientific-behavior boundaries.
+
+### AUDIT-002: Installed egs_brachy and EGSnrc upstream delta
+
+- **Type:** Runtime provenance and upgrade planning.
+- **Status:** Read-only audit complete; no update performed.
+- **Installed baseline:** EGSnrc_CLRP
+  `e5f9ab6db3714f4aa41bd2fee79ad29117070c13` pins egs_brachy
+  `5551a44110ffe57a42788379c0437362fe0e5b76`. The installed executable was built
+  in July 2024. Its runtime library matches the pinned egs_brachy source by
+  checksum; the runtime also contains active research inputs/outputs and must not
+  be updated in place.
+- **Current upstream:** The coherent current EGSnrc_CLRP reference is
+  `5fb40723c23928eaf8c6aabe7db4c4ecbd9f33a9`, 95 superproject commits ahead,
+  pinning egs_brachy `cb9ed4b1aa54e2714eddd091546c3c1fb2d0afd9`. Direct
+  egs_brachy main is `2f5dd4ca92c690065e51cec8c90fd3a69b303ad2`, 38 commits
+  ahead of the installed pin; its seven commits after the coherent pin add Iris
+  eye plaques and documentation, not HDR-lung executable behavior.
+- **Direct egs_brachy significance:** Net executable changes add an optional
+  source-coordinate transform, expand environment variables in muen paths, fix
+  stale parallel egsdat cleanup in run-anywhere output directories, and clean log
+  output. No missing direct commit changes egs_brachy dose scoring or transport
+  mathematics. The source-coordinate transform may support future local-to-world
+  workflows but is not required for current patient-space transformations.
+- **Library significance:** Upstream includes audited air-kerma headers and broad
+  source-library maintenance, plus eye plaques/examples/phantoms. Some source
+  models were added, removed, renamed, or otherwise changed, so wholesale library
+  replacement is not a metadata-only operation. Flexisource is the separately
+  qualified header-only case under VAL-001.
+- **Parent EGSnrc significance:** The 95-commit delta includes EGSnrc v2025a,
+  run-anywhere/path behavior, and fixes for phase-space partitioning, source-
+  collection fluence, specialized fluence/phase-space scoring, egs_kerma,
+  BEAMnrc splitting, and geometry helpers. The reviewed HDR/CIHR inputs use an
+  isotropic photon source and ordinary phantom dose scoring rather than those
+  specialized paths, so no audited commit directly explains their dose scale.
+  A parent-framework update can still alter build/runtime behavior and requires
+  deterministic numerical regression before research use.
+- **Parallel relevance:** Current upstream changes the `egs-parallel` front end
+  to resolve input/output directories explicitly, and egs_brachy cleans stale
+  worker data from the output directory. The lower-level `egs-parallel-cpu`
+  script is unchanged and still has the lock-wait bare-exit behavior; therefore
+  upstream does not by itself resolve the observed missing lock or false-zero
+  timeout. Worker startup remains a separate investigation.
+- **Prioritized upgrade plan:** (1) stage only the qualified Flexisource header in
+  an isolated HDR library after clinical model confirmation; (2) build a separate
+  candidate from coherent EGSnrc_CLRP `5fb4072` with its pinned egs_brachy
+  `cb9ed4b`, without touching protected CIHR assets; (3) run upstream tests plus
+  focused single/parallel completion, TG-43/TG-186, timing, scaling, geometry, and
+  permanent-LDR regressions; (4) compare deterministic numerical outputs against
+  the pinned baseline and independent references; (5) promote only through the
+  existing versioned-runtime approval process. Do not mix the full framework
+  upgrade with GUI scientific fixes or selective source-library metadata.
 
 ## Maintenance rule
 
